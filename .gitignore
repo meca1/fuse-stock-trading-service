@@ -4,23 +4,52 @@ npm-debug.log
 yarn-error.log
 package-lock.json
 yarn.lock
+pnpm-lock.yaml
 
 # Serverless
 .serverless/
 .env
+.env.*
+!.env.example
+
+# TypeScript
+.build/
+*.tsbuildinfo
+.tscache/
+*.js.map
+*.d.ts
+
+# Serverless TypeScript build artifacts
+.serverless-offline/
+.esbuild/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+.history/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Build
+# Build and test
 dist/
 build/
 coverage/
 .webpack/
+.nyc_output/
+reports/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local configuration
+config.local.js
+config.local.json
+.dynamodb/

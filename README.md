@@ -26,9 +26,10 @@ npm install
 .
 ├── serverless.yml     # Configuración de Serverless
 ├── package.json       # Dependencias y scripts
+├── tsconfig.json      # Configuración de TypeScript
 └── src/
     └── handlers/      # Funciones Lambda
-        └── hello.js   # Función de ejemplo
+        └── hello.ts   # Función de ejemplo
 ```
 
 ## Desarrollo local

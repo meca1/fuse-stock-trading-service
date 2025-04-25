@@ -1,9 +1,13 @@
 service: fuse-stock-trading-service
 
-frameworkVersion: '4'
+frameworkVersion: '3'
 
 plugins:
+  - serverless-esbuild
   - serverless-offline
+
+custom:
+  esbuild: ${file(./esbuild.config.js)}
 
 provider:
   name: aws

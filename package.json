@@ -13,7 +13,14 @@
   "author": "meca1 <drramosdev@gmail.com>",
   "license": "ISC",
   "devDependencies": {
-    "serverless": "^4.14.1",
-    "serverless-offline": "^14.4.0"
+    "@types/aws-lambda": "^8.10.149",
+    "@types/node": "^22.15.2",
+    "esbuild": "^0.25.3",
+    "esbuild-node-externals": "^1.18.0",
+    "serverless": "^3.40.0",
+    "serverless-esbuild": "^1.55.0",
+    "serverless-offline": "^12.0.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
   }
 }
