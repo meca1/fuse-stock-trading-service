@@ -1,0 +1,19 @@
+{
+  "name": "fuse-stock-trading-service",
+  "version": "1.0.0",
+  "description": "Servicio de trading de acciones usando Serverless Framework",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "serverless offline",
+    "deploy": "serverless deploy",
+    "deploy:prod": "serverless deploy --stage prod"
+  },
+  "keywords": [],
+  "author": "meca1 <drramosdev@gmail.com>",
+  "license": "ISC",
+  "devDependencies": {
+    "serverless": "^4.14.1",
+    "serverless-offline": "^14.4.0"
+  }
+}
