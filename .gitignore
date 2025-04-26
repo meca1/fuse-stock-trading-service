@@ -53,3 +53,7 @@ yarn-error.log*
 config.local.js
 config.local.json
 .dynamodb/
+
+# Project specific
+tasks.md
+proyect.md
