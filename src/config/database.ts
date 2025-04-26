@@ -1,92 +1,53 @@
-import { Sequelize } from 'sequelize-typescript';
 import dotenv from 'dotenv';
+import { Pool, PoolConfig } from 'pg';
 
 // Load environment variables
 dotenv.config();
 
-// Define types for database configuration
-type DbConfigBase = {
-  username: string;
+// Define type for database configuration
+type DbConfig = {
+  user: string;
   password: string;
   database: string;
   host: string;
   port: number;
-  dialect: 'postgres';
-  logging: boolean | ((sql: string, timing?: number) => void);
-  ssl?: boolean;
-  dialectOptions?: {
-    ssl?: {
-      require: boolean;
-      rejectUnauthorized: boolean;
-    };
+  max?: number;
+  idleTimeoutMillis?: number;
+  connectionTimeoutMillis?: number;
+  ssl?: boolean | { rejectUnauthorized: boolean };
+};
+
+// Unified database configuration
+const dbConfig: DbConfig = {
+  user: process.env.DB_USERNAME || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
+  database: process.env.DB_NAME || 'fuse_stock_trading_dev',
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432', 10),
+  max: process.env.NODE_ENV === 'test' ? 5 : 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000
+};
+
+// Add SSL configuration for production
+if (process.env.NODE_ENV === 'production') {
+  dbConfig.ssl = {
+    rejectUnauthorized: false
   };
-};
+}
 
-type DbConfigEnv = {
-  development: DbConfigBase;
-  test: DbConfigBase;
-  production: DbConfigBase;
-};
+// Create database pool
+const pool = new Pool(dbConfig as PoolConfig);
 
-// Configuration for different environments
-const dbConfig: DbConfigEnv = {
-  development: {
-    username: process.env.DB_USERNAME || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    database: process.env.DB_NAME || 'fuse_stock_trading_dev',
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    dialect: 'postgres',
-    logging: console.log,
-  },
-  test: {
-    username: process.env.DB_USERNAME || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    database: process.env.DB_NAME || 'fuse_stock_trading_test',
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    dialect: 'postgres',
-    logging: false,
-  },
-  production: {
-    username: process.env.DB_USERNAME || '',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || '',
-    host: process.env.DB_HOST || '',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    dialect: 'postgres',
-    logging: false,
-    ssl: true,
-    dialectOptions: {
-      ssl: {
-        require: true,
-        rejectUnauthorized: false,
-      },
-    },
-  },
-};
+// Log connection events in development
+if (process.env.NODE_ENV === 'development') {
+  pool.on('connect', () => {
+    console.log('Connected to PostgreSQL database');
+  });
 
-// Determine current environment
-const env = process.env.NODE_ENV || 'development';
-const config = dbConfig[env as keyof typeof dbConfig];
+  pool.on('error', (err) => {
+    console.error('Unexpected error on idle client', err);
+  });
+}
 
-// Create Sequelize instance
-const sequelize = new Sequelize({
-  database: config.database,
-  username: config.username,
-  password: config.password,
-  host: config.host,
-  port: config.port,
-  dialect: 'postgres',
-  logging: config.logging,
-  ...(config.dialectOptions ? { dialectOptions: config.dialectOptions } : {}),
-  models: [__dirname + '/../models'], // Path to models
-  pool: {
-    max: 5,
-    min: 0,
-    acquire: 30000,
-    idle: 10000,
-  },
-});
-
-export default sequelize;
+export default pool;
