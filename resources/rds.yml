@@ -1,0 +1,45 @@
+Resources:
+  # Security group for RDS
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for RDS PostgreSQL instance
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: ${self:custom.rds.port}
+          ToPort: ${self:custom.rds.port}
+          CidrIp: 0.0.0.0/0
+  
+  # PostgreSQL RDS Instance
+  PostgresRDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: ${self:custom.rds.dbName}
+      Engine: postgres
+      EngineVersion: ${self:custom.rds.engineVersion}
+      DBInstanceClass: ${self:custom.rds.dbInstanceClass}
+      AllocatedStorage: ${self:custom.rds.allocatedStorage}
+      MasterUsername: ${self:custom.rds.dbUsername}
+      MasterUserPassword: ${self:custom.rds.dbPassword}
+      VPCSecurityGroups:
+        - Fn::GetAtt: [RDSSecurityGroup, GroupId]
+      PubliclyAccessible: true
+      Port: ${self:custom.rds.port}
+      BackupRetentionPeriod: 7
+      MultiAZ: false
+      Tags:
+        - Key: Name
+          Value: ${self:service}-${self:provider.stage}-postgres
+    DeletionPolicy: Snapshot
+
+Outputs:
+  RDSEndpoint:
+    Description: RDS PostgreSQL endpoint
+    Value:
+      Fn::GetAtt: [PostgresRDSInstance, Endpoint.Address]
+  RDSPort:
+    Description: RDS PostgreSQL port
+    Value: ${self:custom.rds.port}
+  DatabaseName:
+    Description: RDS PostgreSQL database name
+    Value: ${self:custom.rds.dbName}

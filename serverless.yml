@@ -8,6 +8,15 @@ plugins:
 
 custom:
   esbuild: ${file(./esbuild.config.js)}
+  # RDS database configuration
+  rds:
+    dbName: ${self:provider.environment.DB_NAME}
+    dbUsername: ${self:provider.environment.DB_USERNAME}
+    dbPassword: ${self:provider.environment.DB_PASSWORD}
+    dbInstanceClass: db.t3.micro
+    allocatedStorage: 20
+    engineVersion: '13.7'
+    port: ${self:provider.environment.DB_PORT}
 
 provider:
   name: aws
@@ -16,18 +25,24 @@ provider:
   stage: ${opt:stage, 'dev'}
   environment:
     NODE_ENV: ${self:provider.stage}
-    # Variables de entorno para la base de datos
+    # Database environment variables
     DB_USERNAME: ${env:DB_USERNAME, 'postgres'}
     DB_PASSWORD: ${env:DB_PASSWORD, 'postgres'}
     DB_NAME: ${env:DB_NAME, 'fuse_stock_trading_${self:provider.stage}'}
-    DB_HOST: ${env:DB_HOST, 'localhost'}
+    DB_HOST: 
+      Fn::GetAtt: [PostgresRDSInstance, Endpoint.Address]
     DB_PORT: ${env:DB_PORT, '5432'}
-    # Variables de entorno para la API del proveedor
+    # Vendor API environment variables
     VENDOR_API_URL: ${env:VENDOR_API_URL, 'https://api.challenge.fusefinance.com'}
     VENDOR_API_KEY: ${env:VENDOR_API_KEY, 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'}
+  # IAM permissions to access RDS
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - rds:*
+      Resource: '*'
 
 functions:
-  # Endpoints calificables para stocks
   listStocks:
     handler: src/handlers/stocks/list.handler
     events:
@@ -35,8 +50,7 @@ functions:
           path: /stocks
           method: get
           cors: true
-          
-  # Endpoints calificables para portfolios
+           
   getUserPortfolios:
     handler: src/handlers/portfolios/list.handler
     events:
@@ -60,3 +74,6 @@ functions:
             parameters:
               paths:
                 symbol: true
+
+# AWS CloudFormation resources definition
+resources: ${file(./resources/rds.yml)}
