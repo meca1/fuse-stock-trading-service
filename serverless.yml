@@ -78,6 +78,7 @@ functions:
                 
   buyStock:
     handler: src/handlers/portfolios/buy-stock.handler
+    timeout: 15
     events:
       - http:
           path: /stocks/{symbol}/buy
