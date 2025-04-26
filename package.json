@@ -14,9 +14,11 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "prepare": "husky",
     "db:init": "ts-node src/db/init.ts",
-    "db:init:force": "ts-node src/db/init.ts --force",
-    "db:seed": "ts-node src/db/seed.ts",
-    "db:seed:force": "ts-node src/db/seed.ts --force"
+    "db:migrate": "dbmate up",
+    "db:migrate:create": "dbmate new",
+    "db:migrate:status": "dbmate status",
+    "db:migrate:rollback": "dbmate rollback",
+    "db:migrate:prod": "node scripts/migrate.js"
   },
   "keywords": [],
   "author": "meca1 <drramosdev@gmail.com>",
