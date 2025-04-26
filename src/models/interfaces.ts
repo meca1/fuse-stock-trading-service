@@ -12,38 +12,42 @@ export enum TransactionStatus {
 }
 
 export interface IUser {
-  id: string;
+  id: number;
   name: string;
   email: string;
   password: string;
-  isActive: boolean;
+  is_active: boolean;
+  created_at?: Date;
+  updated_at?: Date;
 }
 
 export interface IPortfolio {
-  id: string;
+  id: number;
   name: string;
-  description?: string;
-  balance: number;
-  userId: string;
+  user_id: number;
+  created_at?: Date;
+  updated_at?: Date;
 }
 
 export interface IStock {
+  id: number;
   symbol: string;
   name: string;
-  currentPrice: number;
-  lastUpdated: Date;
-  description?: string;
+  current_price: number;
+  last_updated?: Date;
+  created_at?: Date;
+  updated_at?: Date;
 }
 
 export interface ITransaction {
-  id: string;
-  portfolioId: string;
-  stockSymbol: string;
+  status: TransactionStatus;
+  id: number;
+  portfolio_id: number;
+  stock_id: number;
   type: TransactionType;
   quantity: number;
   price: number;
-  totalAmount: number;
-  status: TransactionStatus;
-  errorMessage?: string;
-  transactionDate: Date;
+  date?: Date;
+  created_at?: Date;
+  updated_at?: Date;
 }
