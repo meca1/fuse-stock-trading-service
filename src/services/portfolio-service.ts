@@ -7,7 +7,7 @@ import { PortfolioRepository } from '../repositories/portfolio-repository';
 import { StockRepository } from '../repositories/stock-repository';
 import { TransactionRepository } from '../repositories/transaction-repository';
 import { UserRepository } from '../repositories/user-repository';
-import pool from '../config/database';
+import { DatabaseService } from '../config/database';
 
 /**
  * Service to handle portfolio-related operations
@@ -92,7 +92,8 @@ export class PortfolioService {
    * @returns Transaction
    */
   async buyStock(params: BuyStockParams): Promise<ITransaction> {
-    const client = await pool.connect();
+    const dbService = await DatabaseService.getInstance();
+    const client = await dbService.getClient();
     
     try {
       await client.query('BEGIN');
@@ -150,7 +151,8 @@ export class PortfolioService {
     quantity: number,
     price: number
   ): Promise<ITransaction> {
-    const client = await pool.connect();
+    const dbService = await DatabaseService.getInstance();
+    const client = await dbService.getClient();
     
     try {
       await client.query('BEGIN');
