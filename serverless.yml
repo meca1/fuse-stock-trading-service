@@ -3,11 +3,25 @@ service: fuse-stock-trading-service
 frameworkVersion: '3'
 
 plugins:
+  - serverless-dotenv-plugin
   - serverless-esbuild
   - serverless-offline
 
 custom:
   esbuild: ${file(./esbuild.config.js)}
+  # Dotenv plugin configuration
+  dotenv:
+    path: ./.env
+    include:
+      - DB_USERNAME
+      - DB_PASSWORD
+      - DB_NAME
+      - DB_HOST
+      - DB_PORT
+      - VENDOR_API_URL
+      - VENDOR_API_KEY
+      - NODE_ENV
+    logging: true
   # RDS database configuration
   rds:
     dbName: ${self:provider.environment.DB_NAME}
@@ -24,13 +38,12 @@ provider:
   region: us-east-1
   stage: ${opt:stage, 'dev'}
   environment:
-    NODE_ENV: ${self:provider.stage}
+    NODE_ENV: ${env:NODE_ENV, self:provider.stage}
     # Database environment variables
     DB_USERNAME: ${env:DB_USERNAME, 'postgres'}
     DB_PASSWORD: ${env:DB_PASSWORD, 'postgres'}
     DB_NAME: ${env:DB_NAME, 'fuse_stock_trading_${self:provider.stage}'}
-    DB_HOST: 
-      Fn::GetAtt: [PostgresRDSInstance, Endpoint.Address]
+    DB_HOST: ${env:DB_HOST, 'localhost'}
     DB_PORT: ${env:DB_PORT, '5432'}
     # Vendor API environment variables
     VENDOR_API_URL: ${env:VENDOR_API_URL, 'https://api.challenge.fusefinance.com'}
