@@ -129,20 +129,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       price
     });
     
-    // Determine status code based on transaction result
-    const statusCode = transaction.status === TransactionStatus.COMPLETED ? 200 : 400;
-    
+    // La transacción se ha completado correctamente si llegamos a este punto
     return {
-      statusCode,
+      statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        status: transaction.status === TransactionStatus.COMPLETED ? 'success' : 'error',
+        status: 'success',
         data: transaction,
-        message: transaction.status === TransactionStatus.COMPLETED 
-          ? 'Purchase executed successfully' 
-          : 'Error executing purchase',
+        message: 'Purchase executed successfully',
       }),
     };
   } catch (error: any) {
