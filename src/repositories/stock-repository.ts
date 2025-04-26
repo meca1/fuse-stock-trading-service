@@ -1,4 +1,4 @@
-import pool from '../config/database';
+import { DatabaseService } from '../config/database';
 import { IStock } from '../models/interfaces';
 
 export class StockRepository {
@@ -6,7 +6,8 @@ export class StockRepository {
    * Encuentra un stock por su símbolo
    */
   async findBySymbol(symbol: string): Promise<IStock | null> {
-    const result = await pool.query<IStock>(
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<IStock>(
       'SELECT * FROM stocks WHERE symbol = $1',
       [symbol]
     );
@@ -18,7 +19,8 @@ export class StockRepository {
    * Encuentra un stock por su ID
    */
   async findById(id: number): Promise<IStock | null> {
-    const result = await pool.query<IStock>(
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<IStock>(
       'SELECT * FROM stocks WHERE id = $1',
       [id]
     );
@@ -30,7 +32,8 @@ export class StockRepository {
    * Lista todos los stocks
    */
   async findAll(): Promise<IStock[]> {
-    const result = await pool.query<IStock>('SELECT * FROM stocks');
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<IStock>('SELECT * FROM stocks');
     return result.rows;
   }
 
@@ -38,7 +41,8 @@ export class StockRepository {
    * Crea un nuevo stock
    */
   async create(stock: Omit<IStock, 'id' | 'created_at' | 'updated_at'>): Promise<IStock> {
-    const result = await pool.query<IStock>(
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<IStock>(
       `INSERT INTO stocks (symbol, name, current_price, last_updated) 
        VALUES ($1, $2, $3, NOW()) 
        RETURNING *`,
@@ -51,22 +55,23 @@ export class StockRepository {
   /**
    * Actualiza un stock existente
    */
-  async update(symbol: string, stock: Partial<Omit<IStock, 'id' | 'symbol' | 'created_at' | 'updated_at'>>): Promise<IStock | null> {
-    const keys = Object.keys(stock);
-    if (keys.length === 0) return this.findBySymbol(symbol);
-
-    const setClauses = keys.map((key, index) => `${key} = $${index + 2}`);
-    const values = Object.values(stock);
-
+  async update(id: number, stock: Partial<Omit<IStock, 'id' | 'created_at' | 'updated_at'>>): Promise<IStock | null> {
+    // Construir la consulta dinámicamente basada en los campos proporcionados
+    const fields = Object.keys(stock);
+    if (fields.length === 0) return this.findById(id);
+    
+    const setClause = fields.map((field, index) => `${field} = $${index + 2}`).join(', ');
+    const values = fields.map(field => stock[field as keyof typeof stock]);
+    
     const query = `
       UPDATE stocks 
-      SET ${setClauses.join(', ')}, updated_at = NOW() 
-      WHERE symbol = $1 
+      SET ${setClause}, updated_at = NOW() 
+      WHERE id = $1 
       RETURNING *
     `;
-
-    const result = await pool.query<IStock>(query, [symbol, ...values]);
     
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<IStock>(query, [id, ...values]);
     return result.rows.length > 0 ? result.rows[0] : null;
   }
 
@@ -74,7 +79,8 @@ export class StockRepository {
    * Actualiza o crea un stock (upsert)
    */
   async upsert(stock: Omit<IStock, 'id' | 'created_at' | 'updated_at'>): Promise<IStock> {
-    const result = await pool.query<IStock>(
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<IStock>(
       `INSERT INTO stocks (symbol, name, current_price, last_updated) 
        VALUES ($1, $2, $3, NOW())
        ON CONFLICT (symbol) 
@@ -93,46 +99,40 @@ export class StockRepository {
   /**
    * Actualiza varios stocks en una sola transacción
    */
-  async upsertMany(stocks: Omit<IStock, 'id' | 'created_at' | 'updated_at'>[]): Promise<IStock[]> {
-    const client = await pool.connect();
+  async upsertMany(stocks: Array<Omit<IStock, 'id' | 'created_at' | 'updated_at'>>): Promise<void> {
+    if (stocks.length === 0) return;
     
-    try {
-      await client.query('BEGIN');
-      
-      const results: IStock[] = [];
-      
+    // Usar DatabaseService para manejar la transacción
+    const dbService = await DatabaseService.getInstance();
+    
+    await dbService.transaction(async (client) => {
       for (const stock of stocks) {
-        const result = await client.query<IStock>(
-          `INSERT INTO stocks (symbol, name, current_price, last_updated) 
-           VALUES ($1, $2, $3, NOW())
-           ON CONFLICT (symbol) 
-           DO UPDATE SET 
-             name = EXCLUDED.name,
-             current_price = EXCLUDED.current_price,
-             last_updated = NOW(),
-             updated_at = NOW()
-           RETURNING *`,
-          [stock.symbol, stock.name, stock.current_price]
-        );
+        const existingStock = await this.findBySymbol(stock.symbol);
         
-        results.push(result.rows[0]);
+        if (existingStock) {
+          await client.query(
+            `UPDATE stocks 
+             SET name = $1, current_price = $2, last_updated = NOW(), updated_at = NOW() 
+             WHERE symbol = $3`,
+            [stock.name, stock.current_price, stock.symbol]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO stocks (symbol, name, current_price, last_updated) 
+             VALUES ($1, $2, $3, NOW())`,
+            [stock.symbol, stock.name, stock.current_price]
+          );
+        }
       }
-      
-      await client.query('COMMIT');
-      return results;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
+    });
   }
 
   /**
    * Busca stocks cuyo precio ha sido actualizado después de una fecha determinada
    */
   async findUpdatedAfter(date: Date): Promise<IStock[]> {
-    const result = await pool.query<IStock>(
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<IStock>(
       'SELECT * FROM stocks WHERE last_updated > $1',
       [date]
     );
@@ -144,7 +144,8 @@ export class StockRepository {
    * Busca stocks por nombre o símbolo
    */
   async search(query: string): Promise<IStock[]> {
-    const result = await pool.query<IStock>(
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<IStock>(
       `SELECT * FROM stocks 
        WHERE symbol ILIKE $1 OR name ILIKE $1`,
       [`%${query}%`]

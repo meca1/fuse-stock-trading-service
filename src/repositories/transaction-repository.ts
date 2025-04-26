@@ -1,4 +1,4 @@
-import pool from '../config/database';
+import { DatabaseService } from '../config/database';
 import { ITransaction } from '../models/interfaces';
 
 export class TransactionRepository {
@@ -6,7 +6,8 @@ export class TransactionRepository {
    * Encuentra una transacción por su ID
    */
   async findById(id: number): Promise<ITransaction | null> {
-    const result = await pool.query<ITransaction>(
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<ITransaction>(
       'SELECT * FROM transactions WHERE id = $1',
       [id]
     );
@@ -18,7 +19,8 @@ export class TransactionRepository {
    * Lista todas las transacciones de un portfolio
    */
   async findByPortfolioId(portfolioId: number): Promise<ITransaction[]> {
-    const result = await pool.query<ITransaction>(
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<ITransaction>(
       'SELECT * FROM transactions WHERE portfolio_id = $1 ORDER BY date DESC',
       [portfolioId]
     );
@@ -30,7 +32,8 @@ export class TransactionRepository {
    * Lista todas las transacciones de un stock
    */
   async findByStockId(stockId: number): Promise<ITransaction[]> {
-    const result = await pool.query<ITransaction>(
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<ITransaction>(
       'SELECT * FROM transactions WHERE stock_id = $1 ORDER BY date DESC',
       [stockId]
     );
@@ -42,7 +45,8 @@ export class TransactionRepository {
    * Crea una nueva transacción
    */
   async create(transaction: Omit<ITransaction, 'id' | 'created_at' | 'updated_at'>): Promise<ITransaction> {
-    const result = await pool.query<ITransaction>(
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<ITransaction>(
       `INSERT INTO transactions (portfolio_id, stock_id, type, quantity, price, date) 
        VALUES ($1, $2, $3, $4, $5, COALESCE($6, NOW())) 
        RETURNING *`,
@@ -63,7 +67,8 @@ export class TransactionRepository {
    * Crea múltiples transacciones en una sola operación
    */
   async createMany(transactions: Omit<ITransaction, 'id' | 'created_at' | 'updated_at'>[]): Promise<ITransaction[]> {
-    const client = await pool.connect();
+    const dbService = await DatabaseService.getInstance();
+    const client = await dbService.getClient();
     
     try {
       await client.query('BEGIN');
@@ -102,7 +107,8 @@ export class TransactionRepository {
    * Obtiene el total de acciones de un stock en un portfolio
    */
   async getStockQuantityInPortfolio(portfolioId: number, stockId: number): Promise<number> {
-    const result = await pool.query<{ total_quantity: string }>(
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<{ total_quantity: string }>(
       `SELECT 
         SUM(CASE WHEN type = 'BUY' THEN quantity ELSE -quantity END) as total_quantity
        FROM transactions
@@ -119,7 +125,8 @@ export class TransactionRepository {
    * Obtiene el costo promedio de un stock en un portfolio
    */
   async getAverageCostInPortfolio(portfolioId: number, stockId: number): Promise<number> {
-    const result = await pool.query<{ avg_cost: string }>(
+    const dbService = await DatabaseService.getInstance();
+    const result = await dbService.query<{ avg_cost: string }>(
       `SELECT 
         CASE 
           WHEN SUM(CASE WHEN type = 'BUY' THEN quantity ELSE 0 END) = 0 THEN 0
