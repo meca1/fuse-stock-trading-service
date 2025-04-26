@@ -7,9 +7,10 @@ export interface VendorStock {
   symbol: string;
   name: string;
   price: number;
-  exchange: string;
+  exchange?: string;
   industry?: string;
-  timestamp: string; // ISO date string
+  timestamp?: string;
+  pageToken?: string;
 }
 
 // Respuesta de la API para listar stocks
@@ -17,7 +18,7 @@ export interface ListStocksResponse {
   status: number;
   data: {
     items: VendorStock[];
-    nextToken?: string;
+    nextToken: string;
   };
 }
 
