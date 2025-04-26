@@ -23,6 +23,8 @@ export interface ListStocksResponse {
 
 // Parámetros para comprar un stock
 export interface BuyStockParams {
+  portfolioId: number;
+  symbol: string;
   price: number;
   quantity: number;
 }
