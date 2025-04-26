@@ -24,7 +24,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     console.log(`Received request to list portfolios for user: ${userId}`);
     
     const portfolioService = new PortfolioService();
-    const portfolios = await portfolioService.getUserPortfolios(userId);
+    // Convert userId from string to number since the service expects a number
+    const portfolios = await portfolioService.getUserPortfolios(parseInt(userId, 10));
     
     return {
       statusCode: 200,

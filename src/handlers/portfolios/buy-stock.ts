@@ -1,7 +1,8 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { PortfolioService } from '../../services/portfolio-service';
-import { TransactionStatus } from '../../models/interfaces';
-import { Portfolio } from '../../models/Portfolio';
+import { TransactionStatus, TransactionType } from '../../models/interfaces';
+import { PortfolioRepository } from '../../repositories/portfolio-repository';
+import { UserRepository } from '../../repositories/user-repository';
 
 /**
  * Handler to execute a stock purchase
@@ -25,22 +26,40 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     
     // Get or create default portfolio for the transaction
     // In a real application, this would come from authentication or request body
-    let portfolioId: string;
+    let portfolioId: number;
     try {
-      const defaultPortfolio = await Portfolio.findOne({
-        where: { userId: 'default-user' }
-      });
+      const portfolioRepository = new PortfolioRepository();
+      const userRepository = new UserRepository();
       
-      if (defaultPortfolio) {
-        portfolioId = defaultPortfolio.id;
+      // Use a default user ID (1) for demonstration purposes
+      const defaultUserId = 1;
+      
+      // Check if the user exists
+      const user = await userRepository.findById(defaultUserId);
+      if (!user) {
+        return {
+          statusCode: 404,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            status: 'error',
+            message: 'Default user not found',
+          }),
+        };
+      }
+      
+      // Find the user's portfolios
+      const portfolios = await portfolioRepository.findByUserId(defaultUserId);
+      
+      if (portfolios && portfolios.length > 0) {
+        // Use the first portfolio
+        portfolioId = portfolios[0].id;
       } else {
         // Create a default portfolio if none exists
-        const newPortfolio = await Portfolio.create({
-          userId: 'default-user',
+        const newPortfolio = await portfolioRepository.create({
           name: 'Default Portfolio',
-          balance: 10000, // Starting with $10,000
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          user_id: defaultUserId
         });
         portfolioId = newPortfolio.id;
       }
@@ -103,7 +122,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     console.log(`Received request to buy ${quantity} units of ${symbol} at $${price} for portfolio ${portfolioId}`);
     
     const portfolioService = new PortfolioService();
-    const transaction = await portfolioService.buyStock(portfolioId, symbol, quantity, price);
+    const transaction = await portfolioService.buyStock({
+      portfolioId,
+      symbol,
+      quantity,
+      price
+    });
     
     // Determine status code based on transaction result
     const statusCode = transaction.status === TransactionStatus.COMPLETED ? 200 : 400;
@@ -118,7 +142,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         data: transaction,
         message: transaction.status === TransactionStatus.COMPLETED 
           ? 'Purchase executed successfully' 
-          : transaction.errorMessage || 'Error executing purchase',
+          : 'Error executing purchase',
       }),
     };
   } catch (error: any) {
