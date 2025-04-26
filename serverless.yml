@@ -16,11 +16,47 @@ provider:
   stage: ${opt:stage, 'dev'}
   environment:
     NODE_ENV: ${self:provider.stage}
+    # Variables de entorno para la base de datos
+    DB_USERNAME: ${env:DB_USERNAME, 'postgres'}
+    DB_PASSWORD: ${env:DB_PASSWORD, 'postgres'}
+    DB_NAME: ${env:DB_NAME, 'fuse_stock_trading_${self:provider.stage}'}
+    DB_HOST: ${env:DB_HOST, 'localhost'}
+    DB_PORT: ${env:DB_PORT, '5432'}
+    # Variables de entorno para la API del proveedor
+    VENDOR_API_URL: ${env:VENDOR_API_URL, 'https://api.challenge.fusefinance.com'}
+    VENDOR_API_KEY: ${env:VENDOR_API_KEY, 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'}
 
 functions:
-  hello:
-    handler: src/handlers/hello.handler
+  # Endpoints calificables para stocks
+  listStocks:
+    handler: src/handlers/stocks/list.handler
     events:
       - http:
-          path: /
+          path: /stocks
           method: get
+          cors: true
+          
+  # Endpoints calificables para portfolios
+  getUserPortfolios:
+    handler: src/handlers/portfolios/list.handler
+    events:
+      - http:
+          path: /users/{userId}/portfolios
+          method: get
+          cors: true
+          request:
+            parameters:
+              paths:
+                userId: true
+                
+  buyStock:
+    handler: src/handlers/portfolios/buy-stock.handler
+    events:
+      - http:
+          path: /stocks/{symbol}/buy
+          method: post
+          cors: true
+          request:
+            parameters:
+              paths:
+                symbol: true
