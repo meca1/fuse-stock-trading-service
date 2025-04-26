@@ -8,8 +8,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   try {
     console.log('Received request to list stocks');
     
+    // Extract nextToken from query parameters if present
+    const nextToken = event.queryStringParameters?.nextToken;
+    console.log(`Request includes nextToken: ${nextToken || 'none'}`);
+    
     const stockService = new StockService();
-    const stocks = await stockService.listAllStocks();
+    const { stocks, nextToken: newNextToken } = await stockService.listAllStocks(nextToken);
     
     return {
       statusCode: 200,
@@ -20,6 +24,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         status: 'success',
         data: stocks,
         count: stocks.length,
+        nextToken: newNextToken,
       }),
     };
   } catch (error: any) {

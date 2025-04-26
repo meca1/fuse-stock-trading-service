@@ -20,12 +20,13 @@ export class StockService {
 
   /**
    * Gets all available stocks, combining data from the vendor and local database
-   * @returns List of stocks
+   * @param nextToken Optional token for pagination
+   * @returns Object containing list of stocks and nextToken for pagination
    */
-  async listAllStocks(): Promise<IStock[]> {
+  async listAllStocks(nextToken?: string): Promise<{ stocks: IStock[], nextToken?: string }> {
     try {
-      // Get all stocks from the vendor
-      const vendorStocks = await this.fetchAllVendorStocks();
+      // Get stocks from the vendor with pagination
+      const { stocks: vendorStocks, nextToken: newNextToken } = await this.fetchAllVendorStocks(1, nextToken);
       
       // Update local database with the most recent information
       await this.updateLocalStocks(vendorStocks);
@@ -33,7 +34,10 @@ export class StockService {
       // Get updated stocks from the database
       const stocks = await this.stockRepository.findAll();
       
-      return stocks;
+      return {
+        stocks,
+        nextToken: newNextToken
+      };
     } catch (error) {
       console.error('Error getting stock list:', error);
       throw error;
@@ -50,14 +54,14 @@ export class StockService {
       // Search for the stock in the database
       let stock = await this.stockRepository.findBySymbol(symbol);
       
-      // If it doesn't exist or is outdated, get it from the vendor
-      if (!stock || this.isCacheExpired(stock.last_updated)) {
-        const vendorStocks = await this.fetchAllVendorStocks();
-        const vendorStock = vendorStocks.find(s => s.symbol === symbol);
+      // If not found or cache expired, fetch from vendor and update
+      if (!stock || !stock.last_updated || (Date.now() - new Date(stock.last_updated).getTime() > this.cacheExpirationMs)) {
+        const { stocks: vendorStocks } = await this.fetchAllVendorStocks();
+        const vendorStock = vendorStocks.find((s: VendorStock) => s.symbol === symbol);
         
         if (vendorStock) {
-          // Update or create the stock in the database
-          stock = await this.updateOrCreateStock(vendorStock);
+          await this.updateLocalStocks([vendorStock]);
+          stock = await this.stockRepository.findBySymbol(symbol);
         }
       }
       
@@ -82,10 +86,12 @@ export class StockService {
   }
 
   /**
-   * Fetches all stocks from the vendor API
-   * @returns List of vendor stocks
+   * Fetches stocks from the vendor API
+   * @param maxPages Maximum number of pages to fetch (default: 1)
+   * @param startToken Optional token to start pagination from
+   * @returns Object containing list of vendor stocks and nextToken for pagination
    */
-  private async fetchAllVendorStocks(): Promise<VendorStock[]> {
+  private async fetchAllVendorStocks(maxPages: number = 1, startToken?: string): Promise<{ stocks: VendorStock[], nextToken?: string }> {
     try {
       const stocks = await this.stockRepository.findAll();
       const lastUpdate = stocks.length > 0 ? 
@@ -94,20 +100,52 @@ export class StockService {
       
       if (!lastUpdate || (Date.now() - lastUpdate > this.cacheExpirationMs)) {
         console.log('Cache expired or not initialized, fetching fresh data from vendor');
-        const response: ListStocksResponse = await this.vendorApi.listStocks();
-        return response.data.items;
+        
+        // Implement pagination using nextToken with a limit on pages
+        let allStocks: VendorStock[] = [];
+        let nextToken: string | undefined = undefined;
+        let pageCount = 0;
+        
+        do {
+          // Get a page of stocks from the vendor API
+          const response: ListStocksResponse = await this.vendorApi.listStocks(nextToken);
+          
+          // Add the stocks from this page to our collection
+          allStocks = [...allStocks, ...response.data.items];
+          
+          // Get the nextToken for the next page
+          nextToken = response.data.nextToken;
+          pageCount++;
+          
+          console.log(`Fetched ${response.data.items.length} stocks, nextToken: ${nextToken || 'none'}, page ${pageCount}/${maxPages}`);
+          
+          // Stop if we've reached the maximum number of pages
+          if (pageCount >= maxPages) {
+            console.log(`Reached maximum number of pages (${maxPages}), stopping pagination`);
+            break;
+          }
+        } while (nextToken); // Continue until there are no more pages or we reach the limit
+        
+        console.log(`Total stocks fetched from vendor: ${allStocks.length}`);
+        return {
+          stocks: allStocks,
+          nextToken
+        };
       }
       
       console.log('Using cached stock data');
       // Convert database stocks to vendor format
-      return stocks.map(stock => ({
-        symbol: stock.symbol,
-        name: stock.name,
-        price: stock.current_price,
-        exchange: 'NYSE', // Default exchange since IStock doesn't have this property
-        industry: undefined, // Optional field
-        timestamp: stock.last_updated ? new Date(stock.last_updated).toISOString() : new Date().toISOString()
-      }));
+      return {
+        stocks: stocks.map(stock => ({
+          symbol: stock.symbol,
+          name: stock.name,
+          price: stock.current_price,
+          exchange: 'NYSE', // Default exchange since IStock doesn't have this property
+          industry: undefined, // Optional field
+          timestamp: stock.last_updated ? new Date(stock.last_updated).toISOString() : new Date().toISOString()
+        })),
+        nextToken: undefined
+      };
     } catch (error) {
       console.error('Error fetching vendor stocks:', error);
       throw error;
