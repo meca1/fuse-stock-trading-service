@@ -1,11 +1,8 @@
 -- migrate:up
 
--- Create extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- Create tables
 CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id BIGSERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
@@ -15,15 +12,15 @@ CREATE TABLE users (
 );
 
 CREATE TABLE portfolios (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id BIGSERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE stocks (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id BIGSERIAL PRIMARY KEY,
   symbol VARCHAR(20) NOT NULL UNIQUE,
   name VARCHAR(255) NOT NULL,
   current_price DECIMAL(10, 2) NOT NULL,
@@ -33,9 +30,9 @@ CREATE TABLE stocks (
 );
 
 CREATE TABLE transactions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  portfolio_id UUID NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
-  stock_id UUID NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,
+  id BIGSERIAL PRIMARY KEY,
+  portfolio_id BIGINT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
+  stock_id BIGINT NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,
   type VARCHAR(4) NOT NULL CHECK (type IN ('BUY', 'SELL')),
   quantity INTEGER NOT NULL CHECK (quantity > 0),
   price DECIMAL(10, 2) NOT NULL CHECK (price > 0),
@@ -66,4 +63,3 @@ DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS stocks;
 DROP TABLE IF EXISTS portfolios;
 DROP TABLE IF EXISTS users;
-DROP EXTENSION IF EXISTS "uuid-ossp";
