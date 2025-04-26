@@ -78,14 +78,11 @@ export class StockService {
       // Si encontramos el stock y el tiempo desde la última actualización es menor a 5 minutos,
       // lo devolvemos inmediatamente
       if (stock && timeSinceLastUpdate <= FIVE_MINUTES_MS) {
-        console.log(`Using cached stock data for ${symbol} (last updated ${Math.floor(timeSinceLastUpdate/1000/60)} minutes ago)`);
         return stock;
       }
       
       // Para pruebas, si el símbolo es AAPL, devolvemos un precio fijo para evitar timeouts
       if (symbol === 'AAPL') {
-        console.log(`Using hardcoded price for ${symbol} to avoid timeouts`);
-        
         // Si ya existe el stock, actualizamos su precio
         if (stock) {
           await this.stockRepository.update(stock.id, {
@@ -111,13 +108,11 @@ export class StockService {
       // Si el stock existe y tiene información de paginación y el tiempo desde la última actualización
       // es mayor a 4 minutos pero menor a 5 minutos, usamos el token de paginación almacenado
       if (stock && stock.page_token && timeSinceLastUpdate > FOUR_MINUTES_MS && timeSinceLastUpdate <= FIVE_MINUTES_MS) {
-        console.log(`Refreshing ${symbol} using stored pagination token: ${stock.page_token}`);
         try {
           const pageResponse = await this.vendorApi.listStocks(stock.page_token);
           const stockInPage = pageResponse.data.items.find(s => s.symbol === symbol);
           
           if (stockInPage) {
-            console.log(`Found ${symbol} using pagination token with price: ${stockInPage.price}`);
             // Actualizamos el stock con la información de la página
             const stockToUpdate: VendorStock = {
               ...stockInPage,
@@ -127,18 +122,15 @@ export class StockService {
             return await this.stockRepository.findBySymbol(symbol);
           }
         } catch (error) {
-          console.warn(`Error using stored pagination token for ${symbol}:`, error);
           // Si hay un error al usar el token almacenado, continuamos con la búsqueda normal
         }
       }
       
       // Para otros símbolos o si no se pudo usar el token de paginación, buscamos en la primera página
-      console.log(`Searching for ${symbol} in first page`);
       const firstPageResponse = await this.vendorApi.listStocks();
       const firstPageStock = firstPageResponse.data.items.find(s => s.symbol === symbol);
       
       if (firstPageStock) {
-        console.log(`Found ${symbol} in first page with price: ${firstPageStock.price}`);
         // Actualizamos el stock con la información de la primera página
         const stockToUpdate: VendorStock = {
           ...firstPageStock,
@@ -149,10 +141,8 @@ export class StockService {
       }
       
       // Si no encontramos el stock, devolvemos lo que tengamos o null
-      console.log(`Stock ${symbol} not found in first page`);
       return stock;
     } catch (error) {
-      console.error(`Error getting stock ${symbol}:`, error);
       throw error;
     }
   }
@@ -214,11 +204,8 @@ export class StockService {
           nextToken = response.data.nextToken;
           pageCount++;
           
-          console.log(`Fetched ${response.data.items.length} stocks, nextToken: ${nextToken || 'none'}, page ${pageCount}/${maxPages}`);
-          
           // Stop if we've reached the maximum number of pages
           if (pageCount >= maxPages) {
-            console.log(`Reached maximum number of pages (${maxPages}), stopping pagination`);
             break;
           }
         } while (nextToken); // Continue until there are no more pages or we reach the limit
