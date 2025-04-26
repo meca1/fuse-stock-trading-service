@@ -56,7 +56,8 @@ export class DatabaseService {
    * Private constructor to prevent direct instantiation
    */
   private constructor() {
-    // Unified database configuration
+    // Get database configuration from environment variables
+    // These will be loaded by serverless-dotenv-plugin
     const dbConfig: DbConfig = {
       user: process.env.DB_USERNAME || 'postgres',
       password: process.env.DB_PASSWORD || 'postgres',
@@ -65,10 +66,13 @@ export class DatabaseService {
       port: parseInt(process.env.DB_PORT || '5432', 10),
       max: process.env.NODE_ENV === 'test' ? 5 : 20,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      connectionTimeoutMillis: 10000, // Increased to give more time for connection
       application_name: 'fuse-stock-trading-service',
       statement_timeout: 30000 // 30 seconds max per query
     };
+    
+    console.log(`Connecting to database at ${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     
     // Add SSL configuration for production
     if (process.env.NODE_ENV === 'production') {
@@ -274,38 +278,4 @@ export class DatabaseService {
   }
 }
 
-// Create and export a singleton instance for backward compatibility
-let poolInstance: Pool | null = null;
-
-/**
- * Get the database pool instance (for backward compatibility)
- */
-export const getPool = async (): Promise<Pool> => {
-  if (!poolInstance) {
-    const dbService = await DatabaseService.getInstance();
-    poolInstance = dbService.getPool();
-  }
-  return poolInstance;
-};
-
-// Export a default pool for backward compatibility with existing code
-const pool = new Pool({
-  user: process.env.DB_USERNAME || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-  database: process.env.DB_NAME || 'fuse_stock_trading_dev',
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  max: process.env.NODE_ENV === 'test' ? 5 : 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000
-});
-
-// Add SSL configuration for production
-if (process.env.NODE_ENV === 'production') {
-  (pool.options as any).ssl = {
-    rejectUnauthorized: false
-  };
-}
-
-// For backward compatibility
-export default pool;
+// DatabaseService and DatabaseError are already exported above
