@@ -1,7 +1,7 @@
 import { VendorApiClient } from './vendor/api-client';
-import { Stock } from '../models/Stock';
-import { VendorStock } from '../types/vendor';
-import { Op } from 'sequelize';
+import { VendorStock, ListStocksResponse } from '../types/vendor';
+import { StockRepository } from '../repositories/stock-repository';
+import { IStock } from '../models/interfaces';
 
 /**
  * Service to handle stock-related operations
@@ -9,18 +9,20 @@ import { Op } from 'sequelize';
 export class StockService {
   private vendorApi: VendorApiClient;
   private cacheExpirationMs: number;
+  private stockRepository: StockRepository;
 
   constructor() {
     this.vendorApi = new VendorApiClient();
     // 5-minute cache (300,000 ms) since prices change every 5 minutes
     this.cacheExpirationMs = 300000;
+    this.stockRepository = new StockRepository();
   }
 
   /**
    * Gets all available stocks, combining data from the vendor and local database
    * @returns List of stocks
    */
-  async listAllStocks(): Promise<Stock[]> {
+  async listAllStocks(): Promise<IStock[]> {
     try {
       // Get all stocks from the vendor
       const vendorStocks = await this.fetchAllVendorStocks();
@@ -29,7 +31,7 @@ export class StockService {
       await this.updateLocalStocks(vendorStocks);
       
       // Get updated stocks from the database
-      const stocks = await Stock.findAll();
+      const stocks = await this.stockRepository.findAll();
       
       return stocks;
     } catch (error) {
@@ -43,13 +45,13 @@ export class StockService {
    * @param symbol Stock symbol
    * @returns Stock or null if it doesn't exist
    */
-  async getStockBySymbol(symbol: string): Promise<Stock | null> {
+  async getStockBySymbol(symbol: string): Promise<IStock | null> {
     try {
       // Search for the stock in the database
-      let stock = await Stock.findByPk(symbol);
+      let stock = await this.stockRepository.findBySymbol(symbol);
       
       // If it doesn't exist or is outdated, get it from the vendor
-      if (!stock || this.isCacheExpired(stock.lastUpdated)) {
+      if (!stock || this.isCacheExpired(stock.last_updated)) {
         const vendorStocks = await this.fetchAllVendorStocks();
         const vendorStock = vendorStocks.find(s => s.symbol === symbol);
         
@@ -80,79 +82,78 @@ export class StockService {
   }
 
   /**
-   * Gets all stocks from the vendor, handling pagination
-   * @returns Complete list of vendor stocks
+   * Fetches all stocks from the vendor API
+   * @returns List of vendor stocks
    */
   private async fetchAllVendorStocks(): Promise<VendorStock[]> {
-    let allStocks: VendorStock[] = [];
-    let nextToken: string | undefined;
-    
-    do {
-      const response = await this.vendorApi.listStocks(nextToken);
-      allStocks = [...allStocks, ...response.data.items];
-      nextToken = response.data.nextToken;
-    } while (nextToken);
-    
-    return allStocks;
+    try {
+      const stocks = await this.stockRepository.findAll();
+      const lastUpdate = stocks.length > 0 ? 
+        Math.max(...stocks.map(s => s.last_updated ? new Date(s.last_updated).getTime() : 0)) : 
+        null;
+      
+      if (!lastUpdate || (Date.now() - lastUpdate > this.cacheExpirationMs)) {
+        console.log('Cache expired or not initialized, fetching fresh data from vendor');
+        const response: ListStocksResponse = await this.vendorApi.listStocks();
+        return response.data.items;
+      }
+      
+      console.log('Using cached stock data');
+      // Convert database stocks to vendor format
+      return stocks.map(stock => ({
+        symbol: stock.symbol,
+        name: stock.name,
+        price: stock.current_price,
+        exchange: 'NYSE', // Default exchange since IStock doesn't have this property
+        industry: undefined, // Optional field
+        timestamp: stock.last_updated ? new Date(stock.last_updated).toISOString() : new Date().toISOString()
+      }));
+    } catch (error) {
+      console.error('Error fetching vendor stocks:', error);
+      throw error;
+    }
   }
 
   /**
-   * Updates the local database with stock information from the vendor
+   * Updates the local database with the latest stock information from the vendor
    * @param vendorStocks List of vendor stocks
    */
   private async updateLocalStocks(vendorStocks: VendorStock[]): Promise<void> {
-    // Get all symbols from vendor stocks
-    const symbols = vendorStocks.map(stock => stock.symbol);
+    if (vendorStocks.length === 0) {
+      return;
+    }
     
-    // Search for existing stocks in the database
-    const existingStocks = await Stock.findAll({
-      where: {
-        symbol: {
-          [Op.in]: symbols
-        }
-      }
-    });
-    
-    // Create a map of existing stocks for quick access
-    const existingStocksMap = new Map<string, Stock>();
-    existingStocks.forEach(stock => {
-      existingStocksMap.set(stock.symbol, stock);
-    });
-    
-    // Update or create stocks in the database
-    for (const vendorStock of vendorStocks) {
-      await this.updateOrCreateStock(vendorStock, existingStocksMap.get(vendorStock.symbol));
+    try {
+      const stocks = vendorStocks.map(vendorStock => ({
+        symbol: vendorStock.symbol,
+        name: vendorStock.name,
+        current_price: vendorStock.price,
+        last_updated: new Date()
+      }));
+      
+      await this.stockRepository.upsertMany(stocks);
+      
+      console.log(`Updated ${vendorStocks.length} stocks in the database`);
+    } catch (error) {
+      console.error('Error updating local stocks:', error);
+      throw error;
     }
   }
 
   /**
    * Updates or creates a stock in the database
    * @param vendorStock Vendor stock
-   * @param existingStock Existing stock in the database (optional)
    * @returns Updated or created stock
    */
-  private async updateOrCreateStock(vendorStock: VendorStock, existingStock?: Stock): Promise<Stock> {
-    const now = new Date();
+  private async updateOrCreateStock(vendorStock: VendorStock): Promise<IStock> {
+    const stock = {
+      symbol: vendorStock.symbol,
+      name: vendorStock.name,
+      current_price: vendorStock.price,
+      last_updated: new Date()
+    };
     
-    if (existingStock) {
-      // Update existing stock
-      existingStock.name = vendorStock.name;
-      existingStock.currentPrice = vendorStock.price;
-      existingStock.lastUpdated = now;
-      existingStock.description = vendorStock.industry || '';
-      
-      await existingStock.save();
-      return existingStock;
-    } else {
-      // Create new stock
-      return await Stock.create({
-        symbol: vendorStock.symbol,
-        name: vendorStock.name,
-        currentPrice: vendorStock.price,
-        lastUpdated: now,
-        description: vendorStock.industry || '',
-      });
-    }
+    return await this.stockRepository.upsert(stock);
   }
 
   /**
@@ -160,9 +161,11 @@ export class StockService {
    * @param lastUpdated Last update date
    * @returns true if the cache is expired, false otherwise
    */
-  private isCacheExpired(lastUpdated: Date): boolean {
+  private isCacheExpired(lastUpdated: Date | undefined | null): boolean {
+    if (!lastUpdated) return true;
+    
     const now = new Date().getTime();
-    const lastUpdatedTime = lastUpdated.getTime();
+    const lastUpdatedTime = new Date(lastUpdated).getTime();
     
     return (now - lastUpdatedTime) > this.cacheExpirationMs;
   }

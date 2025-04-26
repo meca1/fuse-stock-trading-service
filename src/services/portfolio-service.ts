@@ -1,12 +1,13 @@
-import { Portfolio } from '../models/Portfolio';
-import { Transaction } from '../models/Transaction';
-import { Stock } from '../models/Stock';
-import { User } from '../models/User';
 import { StockService } from './stock-service';
 import { VendorApiClient } from './vendor/api-client';
 import { BuyStockParams } from '../types/vendor';
 import { TransactionStatus, TransactionType } from '../models/interfaces';
-import sequelize from '../config/database';
+import { IPortfolio, ITransaction, IStock, IUser } from '../models/interfaces';
+import { PortfolioRepository } from '../repositories/portfolio-repository';
+import { StockRepository } from '../repositories/stock-repository';
+import { TransactionRepository } from '../repositories/transaction-repository';
+import { UserRepository } from '../repositories/user-repository';
+import pool from '../config/database';
 
 /**
  * Service to handle portfolio-related operations
@@ -14,10 +15,18 @@ import sequelize from '../config/database';
 export class PortfolioService {
   private stockService: StockService;
   private vendorApi: VendorApiClient;
+  private portfolioRepository: PortfolioRepository;
+  private stockRepository: StockRepository;
+  private transactionRepository: TransactionRepository;
+  private userRepository: UserRepository;
 
   constructor() {
     this.stockService = new StockService();
     this.vendorApi = new VendorApiClient();
+    this.portfolioRepository = new PortfolioRepository();
+    this.stockRepository = new StockRepository();
+    this.transactionRepository = new TransactionRepository();
+    this.userRepository = new UserRepository();
   }
 
   /**
@@ -25,19 +34,9 @@ export class PortfolioService {
    * @param userId User ID
    * @returns List of portfolios with their transactions
    */
-  async getUserPortfolios(userId: string): Promise<Portfolio[]> {
+  async getUserPortfolios(userId: number): Promise<IPortfolio[]> {
     try {
-      const portfolios = await Portfolio.findAll({
-        where: { userId },
-        include: [
-          {
-            model: Transaction,
-            as: 'transactions',
-            include: [{ model: Stock }],
-          },
-        ],
-      });
-
+      const portfolios = await this.portfolioRepository.findByUserId(userId);
       return portfolios;
     } catch (error) {
       console.error(`Error getting portfolios for user ${userId}:`, error);
@@ -50,19 +49,9 @@ export class PortfolioService {
    * @param portfolioId Portfolio ID
    * @returns Portfolio or null if it doesn't exist
    */
-  async getPortfolioById(portfolioId: string): Promise<Portfolio | null> {
+  async getPortfolio(portfolioId: number): Promise<IPortfolio | null> {
     try {
-      const portfolio = await Portfolio.findByPk(portfolioId, {
-        include: [
-          {
-            model: Transaction,
-            as: 'transactions',
-            include: [{ model: Stock }],
-          },
-          { model: User },
-        ],
-      });
-
+      const portfolio = await this.portfolioRepository.findById(portfolioId);
       return portfolio;
     } catch (error) {
       console.error(`Error getting portfolio ${portfolioId}:`, error);
@@ -71,211 +60,177 @@ export class PortfolioService {
   }
 
   /**
-   * Executes a stock purchase for a portfolio
-   * @param portfolioId Portfolio ID
-   * @param symbol Stock symbol
-   * @param quantity Quantity to buy
-   * @param price Offered price
-   * @returns Created transaction
+   * Creates a new portfolio for a user
+   * @param userId User ID
+   * @param name Portfolio name
+   * @returns Created portfolio
    */
-  async buyStock(
-    portfolioId: string,
-    symbol: string,
-    quantity: number,
-    price: number
-  ): Promise<Transaction> {
-    // Start database transaction
-    const dbTransaction = await sequelize.transaction();
-
+  async createPortfolio(userId: number, name: string): Promise<IPortfolio> {
     try {
-      // Get the portfolio
-      const portfolio = await Portfolio.findByPk(portfolioId, { transaction: dbTransaction });
-      if (!portfolio) {
-        throw new Error(`Portfolio not found: ${portfolioId}`);
+      // Verify that the user exists
+      const user = await this.userRepository.findById(userId);
+      if (!user) {
+        throw new Error(`User with ID ${userId} not found`);
       }
 
-      // Get updated stock
-      const stock = await this.stockService.getStockBySymbol(symbol);
-      if (!stock) {
-        throw new Error(`Stock not found: ${symbol}`);
-      }
+      // Create the portfolio
+      const portfolio = await this.portfolioRepository.create({
+        name,
+        user_id: userId
+      });
 
-      // Verify that the offered price is valid
-      if (!this.stockService.isValidPrice(stock.currentPrice, price)) {
-        // Create failed transaction
-        const failedTransaction = await Transaction.create(
-          {
-            portfolioId,
-            stockSymbol: symbol,
-            type: TransactionType.BUY,
-            quantity,
-            price,
-            totalAmount: price * quantity,
-            status: TransactionStatus.FAILED,
-            errorMessage: 'Price outside acceptable range (±2%)',
-            transactionDate: new Date(),
-          },
-          { transaction: dbTransaction }
-        );
-
-        await dbTransaction.commit();
-        return failedTransaction;
-      }
-
-      // Calculate total amount
-      const totalAmount = price * quantity;
-
-      // Verify that the portfolio has sufficient balance
-      if (portfolio.balance < totalAmount) {
-        // Create failed transaction
-        const failedTransaction = await Transaction.create(
-          {
-            portfolioId,
-            stockSymbol: symbol,
-            type: TransactionType.BUY,
-            quantity,
-            price,
-            totalAmount,
-            status: TransactionStatus.FAILED,
-            errorMessage: 'Insufficient balance',
-            transactionDate: new Date(),
-          },
-          { transaction: dbTransaction }
-        );
-
-        await dbTransaction.commit();
-        return failedTransaction;
-      }
-
-      // Execute purchase with the vendor
-      const buyParams: BuyStockParams = {
-        price,
-        quantity,
-      };
-
-      try {
-        const buyResponse = await this.vendorApi.buyStock(symbol, buyParams);
-
-        // Update portfolio balance
-        portfolio.balance -= totalAmount;
-        await portfolio.save({ transaction: dbTransaction });
-
-        // Create successful transaction
-        const transaction = await Transaction.create(
-          {
-            portfolioId,
-            stockSymbol: symbol,
-            type: TransactionType.BUY,
-            quantity,
-            price,
-            totalAmount,
-            status: TransactionStatus.COMPLETED,
-            transactionDate: new Date(),
-          },
-          { transaction: dbTransaction }
-        );
-
-        await dbTransaction.commit();
-        return transaction;
-      } catch (error: any) {
-        // Create failed transaction
-        const failedTransaction = await Transaction.create(
-          {
-            portfolioId,
-            stockSymbol: symbol,
-            type: TransactionType.BUY,
-            quantity,
-            price,
-            totalAmount,
-            status: TransactionStatus.FAILED,
-            errorMessage: `Error in vendor API: ${error.message || 'Unknown error'}`,
-            transactionDate: new Date(),
-          },
-          { transaction: dbTransaction }
-        );
-
-        await dbTransaction.commit();
-        return failedTransaction;
-      }
+      return portfolio;
     } catch (error) {
-      // Rollback transaction in case of error
-      await dbTransaction.rollback();
-      console.error(`Error buying stock ${symbol} for portfolio ${portfolioId}:`, error);
+      console.error(`Error creating portfolio for user ${userId}:`, error);
       throw error;
     }
   }
 
   /**
-   * Gets a summary of positions for a portfolio
-   * @param portfolioId Portfolio ID
-   * @returns Position summary
+   * Buys a stock for a portfolio
+   * @param params Buy stock parameters
+   * @returns Transaction
    */
-  async getPortfolioSummary(portfolioId: string): Promise<any> {
+  async buyStock(params: BuyStockParams): Promise<ITransaction> {
+    const client = await pool.connect();
+    
     try {
-      // Get all completed transactions for the portfolio
-      const transactions = await Transaction.findAll({
-        where: {
-          portfolioId,
-          status: TransactionStatus.COMPLETED,
-        },
-        include: [{ model: Stock }],
+      await client.query('BEGIN');
+      
+      // Verify that the portfolio exists and belongs to the user
+      const portfolio = await this.portfolioRepository.findById(params.portfolioId);
+      if (!portfolio) {
+        throw new Error(`Portfolio with ID ${params.portfolioId} not found`);
+      }
+
+      // Verify that the stock exists
+      const stock = await this.stockRepository.findBySymbol(params.symbol);
+      if (!stock) {
+        throw new Error(`Stock with symbol ${params.symbol} not found`);
+      }
+
+      // Verify that the price is valid (within 2% of the current price)
+      if (!this.stockService.isValidPrice(stock.current_price, params.price)) {
+        throw new Error(`Invalid price: ${params.price}. Current price is ${stock.current_price}`);
+      }
+
+      // Create the transaction
+      const transaction = await this.transactionRepository.create({
+        portfolio_id: params.portfolioId,
+        stock_id: stock.id,
+        type: TransactionType.BUY,
+        quantity: params.quantity,
+        price: params.price,
+        status: TransactionStatus.COMPLETED,
+        date: new Date()
       });
 
-      // Group by stock symbol
-      const positionsBySymbol = new Map<string, { quantity: number; totalCost: number; stock: Stock }>();
+      await client.query('COMMIT');
+      return transaction;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error buying stock:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 
-      transactions.forEach((transaction) => {
-        const { stockSymbol, quantity, totalAmount, type, stock } = transaction;
+  /**
+   * Sells a stock from a portfolio
+   * @param portfolioId Portfolio ID
+   * @param stockId Stock ID
+   * @param quantity Quantity to sell
+   * @param price Price per share
+   * @returns Transaction
+   */
+  async sellStock(
+    portfolioId: number,
+    stockId: number,
+    quantity: number,
+    price: number
+  ): Promise<ITransaction> {
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // Verify that the portfolio exists
+      const portfolio = await this.portfolioRepository.findById(portfolioId);
+      if (!portfolio) {
+        throw new Error(`Portfolio with ID ${portfolioId} not found`);
+      }
 
-        if (!positionsBySymbol.has(stockSymbol)) {
-          positionsBySymbol.set(stockSymbol, {
-            quantity: 0,
-            totalCost: 0,
-            stock,
-          });
-        }
+      // Verify that the stock exists
+      const stock = await this.stockRepository.findById(stockId);
+      if (!stock) {
+        throw new Error(`Stock with ID ${stockId} not found`);
+      }
 
-        const position = positionsBySymbol.get(stockSymbol)!;
+      // Verify that the price is valid (within 2% of the current price)
+      if (!this.stockService.isValidPrice(stock.current_price, price)) {
+        throw new Error(`Invalid price: ${price}. Current price is ${stock.current_price}`);
+      }
 
-        if (type === TransactionType.BUY) {
-          position.quantity += quantity;
-          position.totalCost += totalAmount;
-        } else if (type === TransactionType.SELL) {
-          position.quantity -= quantity;
-          position.totalCost -= totalAmount;
-        }
+      // Verify that the user has enough shares to sell
+      const ownedQuantity = await this.transactionRepository.getStockQuantityInPortfolio(portfolioId, stockId);
+      if (ownedQuantity < quantity) {
+        throw new Error(`Not enough shares to sell. Owned: ${ownedQuantity}, Requested: ${quantity}`);
+      }
+
+      // Create the transaction
+      const transaction = await this.transactionRepository.create({
+        portfolio_id: portfolioId,
+        stock_id: stockId,
+        type: TransactionType.SELL,
+        quantity,
+        price,
+        status: TransactionStatus.COMPLETED,
+        date: new Date()
       });
 
-      // Convert map to array of positions
-      const positions = Array.from(positionsBySymbol.entries()).map(([symbol, position]) => {
-        const { quantity, totalCost, stock } = position;
-        const averageCost = quantity > 0 ? totalCost / quantity : 0;
-        const currentValue = quantity * stock.currentPrice;
-        const profitLoss = currentValue - totalCost;
-        const profitLossPercentage = totalCost > 0 ? (profitLoss / totalCost) * 100 : 0;
+      await client.query('COMMIT');
+      return transaction;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error selling stock:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 
-        return {
-          symbol,
-          name: stock.name,
-          quantity,
-          averageCost,
-          currentPrice: stock.currentPrice,
-          currentValue,
-          totalCost,
-          profitLoss,
-          profitLossPercentage,
-        };
-      });
-
-      // Calculate total portfolio value
-      const totalValue = positions.reduce((sum, position) => sum + position.currentValue, 0);
-
-      return {
-        positions,
-        totalValue,
-      };
+  /**
+   * Gets a summary of a portfolio with current values
+   * @param portfolioId Portfolio ID
+   * @returns Portfolio summary
+   */
+  async getPortfolioSummary(portfolioId: number): Promise<any> {
+    try {
+      const summary = await this.portfolioRepository.getPortfolioSummary(portfolioId);
+      
+      if (!summary) {
+        throw new Error(`Portfolio with ID ${portfolioId} not found`);
+      }
+      
+      return summary;
     } catch (error) {
       console.error(`Error getting portfolio summary for ${portfolioId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Gets all transactions for a portfolio
+   * @param portfolioId Portfolio ID
+   * @returns List of transactions
+   */
+  async getPortfolioTransactions(portfolioId: number): Promise<ITransaction[]> {
+    try {
+      const transactions = await this.transactionRepository.findByPortfolioId(portfolioId);
+      return transactions;
+    } catch (error) {
+      console.error(`Error getting transactions for portfolio ${portfolioId}:`, error);
       throw error;
     }
   }
