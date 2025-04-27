@@ -24,8 +24,7 @@
     "dynamodb:list": "node scripts/utils/list-dynamodb-tables.js",
     "dynamodb:scan": "node scripts/utils/scan-table.js",
     "local:setup": "bash scripts/local/init.sh",
-    "build": "tsc",
-    "update-stock-tokens": "ts-node src/scripts/update-stock-tokens.ts"
+    "build": "tsc"
   },
   "keywords": [],
   "author": "meca1 <drramosdev@gmail.com>",
