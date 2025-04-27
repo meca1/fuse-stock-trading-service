@@ -167,4 +167,15 @@ export class PortfolioRepository {
       client.release();
     }
   }
+
+  /**
+   * Actualiza el valor total y la fecha de actualización del portafolio
+   */
+  async updateValueAndTimestamp(portfolioId: number, totalValue: number): Promise<void> {
+    const dbService = await DatabaseService.getInstance();
+    await dbService.query(
+      'UPDATE portfolios SET total_value = $1, last_updated = NOW() WHERE id = $2',
+      [totalValue, portfolioId]
+    );
+  }
 }
