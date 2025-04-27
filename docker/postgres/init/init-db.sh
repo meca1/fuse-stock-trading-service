@@ -1,4 +1,16 @@
 #!/bin/bash
+
+# =============================================================================
+# PostgreSQL Initial Setup Script
+# =============================================================================
+# Este script se ejecuta automáticamente cuando el contenedor de PostgreSQL
+# se inicia por primera vez. Configura:
+#   1. Schema público
+#   2. Permisos básicos
+#   3. Extensiones necesarias
+#   4. Configuración de zona horaria
+# =============================================================================
+
 set -e
 
 # Set up permissions and extensions

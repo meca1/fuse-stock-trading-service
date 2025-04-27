@@ -1,3 +1,39 @@
+# Docker Configuration
+
+Este directorio contiene todas las configuraciones y scripts relacionados con Docker para el entorno de desarrollo local.
+
+## Estructura
+
+```
+docker/
+├── postgres/
+│   ├── init/           # Scripts de inicialización automática
+│   │   ├── init-db.sh  # Configuración inicial de PostgreSQL
+│   │   └── README.md   # Documentación de scripts de inicio
+│   └── scripts/        # Scripts auxiliares para PostgreSQL
+├── dynamodb/
+│   └── init/          # Scripts de inicialización de DynamoDB local
+└── README.md          # Este archivo
+```
+
+## Propósito
+
+Cada subdirectorio tiene un propósito específico:
+
+### PostgreSQL (`postgres/`)
+- `init/`: Scripts que se ejecutan automáticamente al iniciar el contenedor
+- `scripts/`: Scripts auxiliares para mantenimiento y utilidades
+
+### DynamoDB (`dynamodb/`)
+- `init/`: Scripts para configurar DynamoDB local
+
+## Uso
+
+Estos scripts y configuraciones son exclusivamente para desarrollo local.
+Para producción, se utilizan servicios administrados de AWS:
+- RDS para PostgreSQL
+- DynamoDB para las tablas en la nube
+
 # Docker Development Environment
 
 This directory contains Docker configuration for local development of the Fuse Stock Trading Service.
