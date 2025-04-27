@@ -31,6 +31,8 @@ custom:
     allocatedStorage: 20
     engineVersion: '13.7'
     port: ${self:provider.environment.DB_PORT}
+  stockTokensTable: stock_tokens-${self:provider.stage}
+  dynamodbEndpoint: ${env:DYNAMODB_ENDPOINT, 'http://localhost:8000'}
 
 provider:
   name: aws
@@ -88,6 +90,24 @@ functions:
             parameters:
               paths:
                 symbol: true
+
+  updateStockTokens:
+    handler: src/handlers/cron/update-stock-tokens.handler
+    timeout: 300 # 5 minutos
+    memorySize: 256
+    events:
+      - schedule:
+          name: DailyStockTokenUpdate
+          description: 'Trigger daily update of stock tokens'
+          rate: cron(0 0 * * ? *) # Se ejecuta todos los días a las 00:00 UTC
+          enabled: true
+      - http: # Endpoint adicional para pruebas locales
+          path: /update-stock-tokens
+          method: post
+          cors: true
+    environment:
+      DYNAMODB_TABLE: ${self:custom.stockTokensTable}
+      DYNAMODB_ENDPOINT: ${self:custom.dynamodbEndpoint}
 
 # AWS CloudFormation resources definition
 resources: ${file(./resources/rds.yml)}
