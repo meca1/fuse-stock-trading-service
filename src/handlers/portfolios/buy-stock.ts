@@ -1,10 +1,10 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { TransactionType } from '../../types/common/enums';
 import { PortfolioService } from '../../services/portfolio-service';
-import { TransactionType } from '../../models/interfaces';
 import { PortfolioRepository } from '../../repositories/portfolio-repository';
 import { UserRepository } from '../../repositories/user-repository';
 import { StockService } from '../../services/stock-service';
-import { IPortfolio } from '../../models/interfaces';
+import { IPortfolio } from '../../types/models/portfolio';
 
 /**
  * Handler to execute a stock purchase

@@ -193,27 +193,11 @@ export class StockService {
 
   public async getCurrentPrice(symbol: string): Promise<{ price: number }> {
     try {
-      const token = await this.tokenService.getStockToken(symbol);
-      console.log(`Token found for ${symbol}:`, token);
-      
-      if (!token) {
-        throw new Error(`No token found for symbol: ${symbol}`);
-      }
-
-      console.log(`Getting page with token for ${symbol}`);
-      const response = await this.vendorApi.listStocks(token);
-      console.log(`Response for ${symbol}:`, JSON.stringify(response.data));
-      
-      const stock = response.data.items.find(item => item.symbol === symbol);
-      console.log(`Stock found for ${symbol}:`, stock);
-      
+      const stock = await this.getStockBySymbol(symbol);
       if (!stock) {
-        throw new Error(`Stock not found in page: ${symbol}`);
+        throw new Error(`Stock not found: ${symbol}`);
       }
-
-      return {
-        price: stock.price
-      };
+      return { price: stock.price };
     } catch (error) {
       console.error(`Error getting current price for ${symbol}:`, error);
       throw error;

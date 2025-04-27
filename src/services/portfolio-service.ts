@@ -1,6 +1,8 @@
 import { PortfolioRepository } from '../repositories/portfolio-repository';
 import { TransactionRepository } from '../repositories/transaction-repository';
-import { IPortfolio, ITransaction, TransactionType, TransactionStatus } from '../models/interfaces';
+import { IPortfolio } from '../types/models/portfolio';
+import { ITransaction } from '../types/models/transaction';
+import { TransactionType, TransactionStatus } from '../types/common/enums';
 import { StockService } from './stock-service';
 import { VendorApiClient } from './vendor/api-client';
 import { UserRepository } from '../repositories/user-repository';

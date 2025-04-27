@@ -1,5 +1,5 @@
 import { documentClient, STOCK_CACHE_TABLE } from '../config/dynamodb';
-import { VendorStock } from '../types/vendor';
+import { VendorStock } from '../types/vendor/stock-api';
 
 // Interfaz para los elementos en la caché
 interface StockCacheItem {

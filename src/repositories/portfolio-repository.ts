@@ -1,5 +1,6 @@
 import { DatabaseService } from '../config/database';
-import { IPortfolio, ITransaction, IPortfolioSummary } from '../models/interfaces';
+import { IPortfolio, IPortfolioSummary } from '../types/models/portfolio';
+import { ITransaction } from '../types/models/transaction';
 import { StockService } from '../services/stock-service';
 
 interface PortfolioStock {

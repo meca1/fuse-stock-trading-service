@@ -1,5 +1,5 @@
 import { DatabaseService } from '../config/database';
-import { ITransaction } from '../models/interfaces';
+import { ITransaction } from '../types/models/transaction';
 
 export class TransactionRepository {
   /**

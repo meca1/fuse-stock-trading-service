@@ -1,5 +1,5 @@
 import { DatabaseService } from '../config/database';
-import { IUser } from '../models/interfaces';
+import { IUser } from '../types/models/user';
 
 export class UserRepository {
   private dbService: DatabaseService | null = null;

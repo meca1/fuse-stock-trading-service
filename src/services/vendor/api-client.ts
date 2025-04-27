@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import axiosRetry from 'axios-retry';
-import { ListStocksResponse, BuyStockParams, BuyStockResponse, VendorApiError } from '../../types/vendor';
+import { ListStocksResponse, BuyStockParams, BuyStockResponse, VendorApiError } from '../../types/vendor/stock-api';
 
 /**
  * Cliente para interactuar con la API del proveedor de stocks
