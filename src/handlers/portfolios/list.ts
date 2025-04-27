@@ -2,7 +2,7 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { PortfolioService } from '../../services/portfolio-service';
 
 /**
- * Handler to list portfolios for a user
+ * Handler to get the portfolio summary for a user
  */
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
@@ -21,12 +21,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       };
     }
     
-    console.log(`Received request to list portfolios for user: ${userId}`);
-    
+    console.log(`Received request to get portfolio summary for user: ${userId}`);
     const portfolioService = new PortfolioService();
-    // Convert userId from string to number since the service expects a number
-    const portfolios = await portfolioService.getUserPortfolios(parseInt(userId, 10));
-    
+    const summary = await portfolioService.getUserPortfolioSummary(Number(userId));
     return {
       statusCode: 200,
       headers: {
@@ -34,13 +31,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       },
       body: JSON.stringify({
         status: 'success',
-        data: portfolios,
-        count: portfolios.length,
+        data: summary
       }),
     };
   } catch (error: any) {
-    console.error('Error listing portfolios:', error);
-    
+    console.error('Error getting portfolio summary:', error);
     return {
       statusCode: 500,
       headers: {
@@ -48,7 +43,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       },
       body: JSON.stringify({
         status: 'error',
-        message: 'Error getting portfolio list',
+        message: 'Error getting portfolio summary',
         error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       }),
     };
