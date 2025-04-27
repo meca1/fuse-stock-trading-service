@@ -25,7 +25,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         })
       };
     }
-
+    
     // Validate request body
     if (!event.body) {
       return {
@@ -37,9 +37,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         })
       };
     }
-
+    
     const { price, quantity, userId } = JSON.parse(event.body);
-
+    
     if (!price || !quantity || !userId) {
       return {
         statusCode: 400,
@@ -50,7 +50,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         })
       };
     }
-
+    
     // Get current price from StockService
     const stockService = StockService.getInstance();
     const { price: currentPrice } = await stockService.getCurrentPrice(symbol);
@@ -67,7 +67,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         })
       };
     }
-
+    
     // Validate price is within 2% of current price
     const priceDiff = Math.abs(price - numericCurrentPrice);
     const maxDiff = numericCurrentPrice * 0.02;
@@ -82,7 +82,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         })
       };
     }
-
+    
     // Get or create portfolio for user
     const portfolioRepository = new PortfolioRepository();
     const userRepository = new UserRepository();
@@ -100,7 +100,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         })
       };
     }
-
+    
     const portfolios = await portfolioRepository.findByUserId(userId);
     
     let portfolio: IPortfolio;
@@ -142,22 +142,22 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     // Execute purchase
-    const portfolioService = new PortfolioService();
+      const portfolioService = new PortfolioService();
     const transaction = await portfolioService.executeStockPurchase(
       portfolio.id,
-      symbol,
+        symbol,
       quantity,
       price,
       TransactionType.BUY
     );
-
+      
     // Update stock price in database after successful purchase
     await stockService.updateStockPrice(symbol, numericCurrentPrice);
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        status: 'success',
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          status: 'success',
         data: {
           ...transaction,
           currentPrice: numericCurrentPrice

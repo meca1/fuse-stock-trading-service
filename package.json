@@ -20,7 +20,8 @@
     "db:migrate:rollback": "dbmate rollback",
     "db:migrate:prod": "node scripts/migrate.js",
     "dynamodb:init": "node scripts/init-dynamodb.js",
-    "build": "tsc"
+    "build": "tsc",
+    "update-stock-tokens": "ts-node src/scripts/update-stock-tokens.ts"
   },
   "keywords": [],
   "author": "meca1 <drramosdev@gmail.com>",
