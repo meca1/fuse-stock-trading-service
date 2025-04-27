@@ -15,6 +15,8 @@ export interface IUser {
   id: number;
   name: string;
   email: string;
+  password?: string;
+  is_active?: boolean;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -33,7 +35,11 @@ export interface IStock {
   name: string;
   current_price: number;
   page_token?: string;
+  page_number?: number;
+  exchange?: string;
   last_updated?: Date;
+  created_at?: Date;
+  updated_at?: Date;
 }
 
 export interface ITransaction {
