@@ -1,5 +1,5 @@
 import { DatabaseService } from '../config/database';
-import { IPortfolio, ITransaction } from '../models/interfaces';
+import { IPortfolio, ITransaction, IPortfolioSummary } from '../models/interfaces';
 
 export class PortfolioRepository {
   /**
@@ -80,95 +80,6 @@ export class PortfolioRepository {
   }
 
   /**
-   * Obtiene el valor total de un portfolio
-   */
-  async getPortfolioValue(portfolioId: number): Promise<number> {
-    const dbService = await DatabaseService.getInstance();
-    const result = await dbService.query<{ total_value: string }>(
-      `SELECT SUM(t.quantity * s.current_price) as total_value 
-       FROM transactions t 
-       JOIN stocks s ON t.stock_id = s.id 
-       WHERE t.portfolio_id = $1 AND t.type = 'BUY'`,
-      [portfolioId]
-    );
-    
-    return parseFloat(result.rows[0]?.total_value || '0');
-  }
-
-  /**
-   * Obtiene las acciones de un portfolio
-   */
-  async getPortfolioStocks(portfolioId: number): Promise<any[]> {
-    const dbService = await DatabaseService.getInstance();
-    const result = await dbService.query(
-      `SELECT 
-         s.id, 
-         s.symbol, 
-         s.name, 
-         s.current_price, 
-         SUM(t.quantity) as total_quantity, 
-         SUM(t.quantity * t.price) / SUM(t.quantity) as avg_price,
-         SUM(t.quantity * s.current_price) as current_value,
-         SUM(t.quantity * s.current_price) - SUM(t.quantity * t.price) as profit_loss
-       FROM transactions t 
-       JOIN stocks s ON t.stock_id = s.id 
-       WHERE t.portfolio_id = $1 AND t.type = 'BUY'
-       GROUP BY s.id, s.symbol, s.name, s.current_price
-       HAVING SUM(t.quantity) > 0
-       ORDER BY s.symbol`,
-      [portfolioId]
-    );
-    
-    return result.rows.map((stock: any) => ({
-      ...stock,
-      avg_price: parseFloat(stock.avg_price),
-      current_value: parseFloat(stock.current_value),
-      profit_loss: parseFloat(stock.profit_loss),
-      profit_loss_percent: (parseFloat(stock.profit_loss) / (parseFloat(stock.avg_price) * parseInt(stock.total_quantity))) * 100
-    }));
-  }
-
-  /**
-   * Obtiene un resumen del portfolio con el valor actual de las acciones
-   */
-  async getPortfolioSummary(portfolioId: number): Promise<any> {
-    const dbService = await DatabaseService.getInstance();
-    const client = await dbService.getClient();
-    
-    try {
-      // Obtener información básica del portfolio
-      const portfolioResult = await client.query<IPortfolio>(
-        'SELECT * FROM portfolios WHERE id = $1',
-        [portfolioId]
-      );
-      
-      if (portfolioResult.rows.length === 0) {
-        return null;
-      }
-      
-      const portfolio = portfolioResult.rows[0];
-      
-      // Obtener valor total del portfolio
-      const portfolioValue = await this.getPortfolioValue(portfolioId);
-      
-      // Obtener acciones del portfolio
-      const portfolioStocks = await this.getPortfolioStocks(portfolioId);
-      
-      return {
-        id: portfolio.id,
-        name: portfolio.name,
-        user_id: portfolio.user_id,
-        created_at: portfolio.created_at,
-        updated_at: portfolio.updated_at,
-        stocks: portfolioStocks,
-        total_value: portfolioValue
-      };
-    } finally {
-      client.release();
-    }
-  }
-
-  /**
    * Actualiza el valor total y la fecha de actualización del portafolio
    */
   async updateValueAndTimestamp(portfolioId: number, totalValue: number): Promise<void> {
@@ -177,5 +88,52 @@ export class PortfolioRepository {
       'UPDATE portfolios SET total_value = $1, last_updated = NOW() WHERE id = $2',
       [totalValue, portfolioId]
     );
+  }
+
+  /**
+   * Obtiene el valor total y el resumen del portafolio
+   */
+  async getPortfolioValueAndSummary(portfolioId: string): Promise<{ value: number; summary: IPortfolioSummary[] }> {
+    const dbService = await DatabaseService.getInstance();
+    const client = await dbService.getClient();
+
+    try {
+      const result = await client.query<IPortfolioSummary & { total_value: number }>(
+        `WITH portfolio_summary AS (
+          SELECT 
+            t.stock_symbol,
+            s.current_price,
+            SUM(CASE WHEN t.type = 'BUY' THEN t.quantity ELSE -t.quantity END) as quantity,
+            SUM(CASE WHEN t.type = 'BUY' THEN t.quantity * t.price ELSE -t.quantity * t.price END) as total_cost
+          FROM transactions t
+          LEFT JOIN stocks s ON t.stock_symbol = s.symbol
+          WHERE t.portfolio_id = $1 AND t.status = 'COMPLETED'
+          GROUP BY t.stock_symbol, s.current_price
+          HAVING SUM(CASE WHEN t.type = 'BUY' THEN t.quantity ELSE -t.quantity END) > 0
+        )
+        SELECT 
+          stock_symbol,
+          quantity,
+          current_price,
+          total_cost,
+          (quantity * current_price) as current_value,
+          ((quantity * current_price) - total_cost) as profit_loss,
+          SUM(quantity * current_price) OVER () as total_value
+        FROM portfolio_summary
+        ORDER BY current_value DESC`,
+        [portfolioId]
+      );
+
+      if (result.rows.length === 0) {
+        return { value: 0, summary: [] };
+      }
+
+      const totalValue = result.rows[0].total_value;
+      const summary = result.rows.map(({ total_value, ...row }) => row);
+
+      return { value: totalValue, summary };
+    } finally {
+      client.release();
+    }
   }
 }
