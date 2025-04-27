@@ -46,7 +46,7 @@ export interface ITransaction {
   status: TransactionStatus;
   id: number;
   portfolio_id: number;
-  stock_id: number;
+  stock_symbol: string;
   type: TransactionType;
   quantity: number;
   price: number;
