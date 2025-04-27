@@ -3,10 +3,10 @@ const AWS = require('aws-sdk');
 
 // Configuración para DynamoDB local
 const dynamoConfig = {
-  region: 'us-east-1',
-  endpoint: 'http://localhost:8000',
-  accessKeyId: 'LOCAL_FAKE_KEY',
-  secretAccessKey: 'LOCAL_FAKE_SECRET'
+  region: process.env.DYNAMODB_REGION || 'us-east-1',
+  endpoint: process.env.DYNAMODB_ENDPOINT || 'http://dynamodb:8000',
+  accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'LOCAL_FAKE_KEY',
+  secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'LOCAL_FAKE_SECRET'
 };
 
 // Nombre de la tabla de caché
