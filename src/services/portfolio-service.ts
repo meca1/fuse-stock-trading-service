@@ -313,6 +313,29 @@ export class PortfolioService {
     }
   }
 
+  // Calcula el valor total del portafolio usando los precios actuales del vendor
+  async calculatePortfolioValue(portfolioId: number): Promise<number> {
+    const transactions = await this.transactionRepository.findByPortfolioId(portfolioId);
+    const stockService = StockService.getInstance();
+    let totalValue = 0;
+    // Agrupar por símbolo y sumar cantidad neta
+    const holdings: Record<string, number> = {};
+    for (const tx of transactions) {
+      if (!holdings[tx.stock_symbol]) holdings[tx.stock_symbol] = 0;
+      holdings[tx.stock_symbol] += tx.type === TransactionType.BUY ? tx.quantity : -tx.quantity;
+    }
+    // Para cada símbolo, obtener el precio actual y multiplicar por la cantidad neta
+    for (const symbol of Object.keys(holdings)) {
+      if (holdings[symbol] > 0) {
+        const stock = await stockService.getStockBySymbol(symbol);
+        if (stock) {
+          totalValue += holdings[symbol] * stock.price;
+        }
+      }
+    }
+    return totalValue;
+  }
+
   async executeStockPurchase(
     portfolioId: number,
     symbol: string,
@@ -321,26 +344,106 @@ export class PortfolioService {
     type: TransactionType
   ): Promise<ITransaction> {
     try {
-      // Get stock from database
-      const stock = await this.stockRepository.findBySymbol(symbol);
+      // Get stock from vendor API using StockService
+      const stockService = StockService.getInstance();
+      const stock = await stockService.getStockBySymbol(symbol);
+      
       if (!stock) {
         throw new Error(`Stock with symbol ${symbol} not found`);
+      }
+
+      // Validate price is within range
+      if (!stockService.isValidPrice(stock.price, price)) {
+        throw new Error(`Price must be within 2% of current price ($${stock.price})`);
       }
 
       // Create transaction
       const transaction = await this.transactionRepository.create({
         portfolio_id: portfolioId,
-        stock_id: stock.id,
+        stock_symbol: symbol, // Use symbol instead of stock_id
         type,
         quantity,
         price,
         status: TransactionStatus.COMPLETED
       });
 
+      // Calcular y actualizar el valor total del portafolio
+      const totalValue = await this.calculatePortfolioValue(portfolioId);
+      await this.portfolioRepository.updateValueAndTimestamp(portfolioId, totalValue);
+
       return transaction;
     } catch (error) {
       console.error('Error executing stock purchase:', error);
       throw error;
     }
+  }
+
+  /**
+   * Devuelve el resumen del portafolio de un usuario con la estructura solicitada
+   */
+  async getUserPortfolioSummary(userId: number): Promise<any> {
+    // Obtener el portafolio del usuario
+    const portfolios = await this.portfolioRepository.findByUserId(userId);
+    if (!portfolios || portfolios.length === 0) {
+      throw new Error('Portfolio not found for user');
+    }
+    const portfolio = portfolios[0];
+    // Obtener todas las transacciones
+    const transactions = await this.transactionRepository.findByPortfolioId(portfolio.id);
+    // Agrupar por símbolo
+    const stockService = StockService.getInstance();
+    const stocksMap: Record<string, { quantity: number; totalCost: number; }> = {};
+    for (const tx of transactions) {
+      if (!stocksMap[tx.stock_symbol]) {
+        stocksMap[tx.stock_symbol] = { quantity: 0, totalCost: 0 };
+      }
+      if (tx.type === TransactionType.BUY) {
+        stocksMap[tx.stock_symbol].quantity += tx.quantity;
+        stocksMap[tx.stock_symbol].totalCost += tx.quantity * tx.price;
+      } else if (tx.type === TransactionType.SELL) {
+        stocksMap[tx.stock_symbol].quantity -= tx.quantity;
+        stocksMap[tx.stock_symbol].totalCost -= tx.quantity * tx.price; // Para el promedio, solo cuenta compras
+      }
+    }
+    // Para cada símbolo, obtener info del vendor y calcular métricas
+    let totalValue = 0;
+    const stocks = [];
+    for (const symbol of Object.keys(stocksMap)) {
+      const holding = stocksMap[symbol];
+      if (holding.quantity > 0) {
+        const stock = await stockService.getStockBySymbol(symbol);
+        if (stock) {
+          const averagePrice = holding.totalCost / holding.quantity;
+          const currentPrice = stock.price;
+          const profitAbs = (currentPrice - averagePrice) * holding.quantity;
+          const profitPct = averagePrice > 0 ? ((currentPrice - averagePrice) / averagePrice) * 100 : 0;
+          totalValue += holding.quantity * currentPrice;
+          stocks.push({
+            symbol: stock.symbol,
+            name: stock.name,
+            quantity: holding.quantity,
+            averagePrice: Number(averagePrice.toFixed(2)),
+            currentPrice: Number(currentPrice.toFixed(2)),
+            profitLoss: {
+              absolute: Number(profitAbs.toFixed(2)),
+              percentage: Number(profitPct.toFixed(2))
+            }
+          });
+        }
+      }
+    }
+    // Simular performance (puedes implementar histórico real si lo tienes)
+    const performance = {
+      lastMonth: 0,
+      lastYear: 0
+    };
+    return {
+      userId: userId,
+      totalValue: Number(totalValue.toFixed(2)),
+      currency: 'USD',
+      lastUpdated: portfolio.last_updated,
+      stocks,
+      performance
+    };
   }
 }
