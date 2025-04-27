@@ -1,6 +1,6 @@
 import { PortfolioRepository } from '../repositories/portfolio-repository';
 import { TransactionRepository } from '../repositories/transaction-repository';
-import { IPortfolio } from '../types/models/portfolio';
+import { IPortfolio, PortfolioStock, PortfolioSummaryResponse } from '../types/models/portfolio';
 import { ITransaction } from '../types/models/transaction';
 import { TransactionType, TransactionStatus } from '../types/common/enums';
 import { StockService } from './stock-service';
@@ -137,7 +137,7 @@ export class PortfolioService {
 
       // Por ahora solo manejamos el primer portfolio del usuario
       const portfolio = portfolios[0];
-      const summary = await this.portfolioRepository.getPortfolioValueAndSummary(portfolio.id);
+      const summary = await this.getPortfolioSummary(portfolio.id);
 
       return {
         status: "success",
@@ -147,5 +147,87 @@ export class PortfolioService {
       console.error('Error getting portfolio summary:', error);
       throw error;
     }
+  }
+
+  /**
+   * Obtiene un resumen completo del portfolio incluyendo el valor actual de las acciones
+   */
+  async getPortfolioSummary(portfolioId: number): Promise<PortfolioSummaryResponse> {
+    try {
+      // Obtenemos el portfolio
+      const portfolio = await this.portfolioRepository.findById(portfolioId);
+      if (!portfolio) {
+        throw new Error(`Portfolio not found: ${portfolioId}`);
+      }
+
+      // Obtenemos el resumen de las acciones
+      const stockSummary = await this.portfolioRepository.getPortfolioStockSummary(portfolioId);
+
+      // Obtenemos los precios actuales de las acciones en paralelo
+      const stockPromises = stockSummary.map(async (summary) => {
+        try {
+          const stockDetails = await this.stockService.getStockBySymbol(summary.symbol);
+          if (!stockDetails) {
+            console.warn(`Stock details not found for symbol: ${summary.symbol}`);
+            return null;
+          }
+
+          const averagePrice = summary.total_cost / summary.quantity;
+          const currentPrice = stockDetails.price;
+          const profitLossAbsolute = (currentPrice - averagePrice) * summary.quantity;
+          const profitLossPercentage = ((currentPrice - averagePrice) / averagePrice) * 100;
+
+          return {
+            symbol: summary.symbol,
+            name: stockDetails.name || summary.symbol,
+            quantity: summary.quantity,
+            averagePrice: Number(averagePrice.toFixed(2)),
+            currentPrice: Number(currentPrice.toFixed(2)),
+            profitLoss: {
+              absolute: Number(profitLossAbsolute.toFixed(2)),
+              percentage: Number(profitLossPercentage.toFixed(1))
+            }
+          };
+        } catch (error) {
+          console.error(`Error getting stock details for ${summary.symbol}:`, error);
+          return null;
+        }
+      });
+
+      // Esperamos a que todas las promesas se resuelvan y filtramos los nulls
+      const stocks = (await Promise.all(stockPromises)).filter((stock): stock is PortfolioStock => stock !== null);
+
+      // Calculamos el valor total del portfolio
+      const totalValue = stocks.reduce((sum, stock) => sum + (stock.currentPrice * stock.quantity), 0);
+
+      // Actualizamos el valor total en la base de datos
+      await this.portfolioRepository.updateValueAndTimestamp(portfolioId, totalValue);
+
+      // Calculamos el rendimiento (simulado por ahora)
+      const performance = {
+        lastMonth: Number((Math.random() * 10).toFixed(1)),
+        lastYear: Number((Math.random() * 25).toFixed(1))
+      };
+
+      return {
+        userId: portfolio.user_id,
+        totalValue: Number(totalValue.toFixed(2)),
+        currency: "USD",
+        lastUpdated: new Date().toISOString(),
+        stocks,
+        performance
+      };
+    } catch (error) {
+      console.error('Error getting portfolio summary:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene el valor actual del portfolio
+   */
+  async getPortfolioValue(portfolioId: number): Promise<number> {
+    const summary = await this.getPortfolioSummary(portfolioId);
+    return summary.totalValue;
   }
 }
