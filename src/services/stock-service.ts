@@ -1,13 +1,9 @@
 import { VendorApiClient } from './vendor/api-client';
 import { VendorStock, ListStocksResponse } from '../types/vendor';
-import { IStock } from '../models/interfaces';
 import { VendorService } from './vendor-service';
 import { StockTokenService } from './stock-token-service';
 
 interface EnhancedVendorStock extends VendorStock {
-  current_price?: number;
-  last_updated?: string;
-  market?: string;
   percentageChange?: number;
   volume?: number;
 }
@@ -18,14 +14,11 @@ interface EnhancedVendorStock extends VendorStock {
 export class StockService {
   private static instance: StockService;
   private vendorApi: VendorApiClient;
-  private cacheExpirationMs: number;
   private vendorService: VendorService;
   private tokenService: StockTokenService;
 
   private constructor() {
     this.vendorApi = new VendorApiClient();
-    // 5-minute cache (300,000 ms) since prices change every 5 minutes
-    this.cacheExpirationMs = 300000;
     this.vendorService = VendorService.getInstance();
     this.tokenService = StockTokenService.getInstance();
   }
@@ -175,20 +168,6 @@ export class StockService {
       console.error('Error fetching vendor stocks:', error);
       throw error;
     }
-  }
-
-  /**
-   * Checks if a stock's cache is expired
-   * @param lastUpdated Last update date
-   * @returns true if the cache is expired, false otherwise
-   */
-  private isCacheExpired(lastUpdated: Date | undefined | null): boolean {
-    if (!lastUpdated) return true;
-    
-    const now = new Date().getTime();
-    const lastUpdatedTime = new Date(lastUpdated).getTime();
-    
-    return (now - lastUpdatedTime) > this.cacheExpirationMs;
   }
 
   public async getCurrentPrice(symbol: string): Promise<{ price: number }> {
