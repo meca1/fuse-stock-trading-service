@@ -19,29 +19,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    networks:
-      - fuse-network
 
-  db-migrate:
-    image: amacneil/dbmate:latest
-    container_name: fuse-db-migrate
-    environment:
-      DATABASE_URL: postgres://${DB_USERNAME:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-fuse_stock_trading_dev}?sslmode=disable
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: dynamodb-local
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -inMemory"
     volumes:
-      - ./db/migrations:/db/migrations
-      - ./dbmate.yml:/dbmate.yml
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: up
-    networks:
-      - fuse-network
-
-
+      - dynamodb-data:/home/dynamodblocal/data
+    working_dir: /home/dynamodblocal
+    user: "1000:1000"
 
 volumes:
-  postgres_data:
-
-networks:
-  fuse-network:
-    driver: bridge
+  postgres-data:
+  dynamodb-data:
