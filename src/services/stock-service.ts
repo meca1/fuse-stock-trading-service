@@ -129,8 +129,7 @@ export class StockService {
             symbol: stock.symbol,
             name: stock.name,
             price: stock.price,
-            exchange: stock.exchange || 'NYSE',
-            timestamp: stock.timestamp
+            exchange: stock.exchange || 'NYSE'
           };
         }
       }
@@ -150,8 +149,7 @@ export class StockService {
         symbol: stock.symbol,
         name: stock.name,
         price: stock.price,
-        exchange: stock.exchange || 'NYSE',
-        timestamp: stock.timestamp
+        exchange: stock.exchange || 'NYSE'
       };
     } catch (error) {
       console.error(`Error getting stock ${symbol}:`, error);
@@ -185,10 +183,13 @@ export class StockService {
       let pageCount = 0;
       do {
         const response: ListStocksResponse = await this.vendorApi.listStocks(nextToken);
-        const stocksWithPagination = response.data.items.map((stock: VendorStock) => ({
-          ...stock,
-          pageToken: response.data.nextToken || undefined,
-          exchange: stock.exchange || 'NYSE'
+        const stocksWithPagination: EnhancedVendorStock[] = response.data.items.map(stock => ({
+          symbol: stock.symbol,
+          name: stock.name,
+          price: stock.price,
+          exchange: stock.exchange || 'NYSE',
+          timestamp: stock.timestamp,
+          pageToken: response.data.nextToken || undefined
         }));
         allStocks = [...allStocks, ...stocksWithPagination];
         nextToken = response.data.nextToken;

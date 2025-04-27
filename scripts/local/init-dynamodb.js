@@ -1,39 +1,58 @@
-const AWS = require('aws-sdk');
+const { DynamoDBClient, CreateTableCommand, ListTablesCommand } = require('@aws-sdk/client-dynamodb');
 
-// Configurar el cliente de DynamoDB
-const dynamodb = new AWS.DynamoDB({
-  region: process.env.DYNAMODB_REGION || 'us-east-1',
-  endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
-  accessKeyId: 'local',
-  secretAccessKey: 'local'
-});
+const dynamoConfig = {
+  region: 'us-east-1',
+  endpoint: 'http://localhost:8000',
+  credentials: {
+    accessKeyId: 'LOCAL_FAKE_KEY',
+    secretAccessKey: 'LOCAL_FAKE_SECRET'
+  }
+};
 
-const tableName = process.env.DYNAMODB_TABLE || 'stock_tokens-local';
+const client = new DynamoDBClient(dynamoConfig);
 
-async function createTable() {
+const createStockTokensTable = async () => {
   const params = {
-    TableName: tableName,
+    TableName: 'stock_tokens-local',
     KeySchema: [
       { AttributeName: 'symbol', KeyType: 'HASH' }
     ],
     AttributeDefinitions: [
       { AttributeName: 'symbol', AttributeType: 'S' }
     ],
-    BillingMode: 'PAY_PER_REQUEST'
+    ProvisionedThroughput: {
+      ReadCapacityUnits: 5,
+      WriteCapacityUnits: 5
+    }
   };
 
   try {
-    console.log(`Creating DynamoDB table: ${tableName}`);
-    await dynamodb.createTable(params).promise();
-    console.log(`Table ${tableName} created successfully`);
-  } catch (error) {
-    if (error.code === 'ResourceInUseException') {
-      console.log(`Table ${tableName} already exists`);
-    } else {
-      console.error('Error creating table:', error);
-      throw error;
+    const data = await client.send(new CreateTableCommand(params));
+    console.log('Created table:', data);
+    return data;
+  } catch (err) {
+    if (err.name === 'ResourceInUseException') {
+      console.log('Table already exists');
+      return;
     }
+    throw err;
   }
-}
+};
 
-createTable(); 
+const init = async () => {
+  try {
+    // List existing tables
+    const { TableNames } = await client.send(new ListTablesCommand({}));
+    console.log('Existing tables:', TableNames);
+
+    // Create tables if they don't exist
+    await createStockTokensTable();
+    
+    console.log('DynamoDB initialization completed');
+  } catch (err) {
+    console.error('Error initializing DynamoDB:', err);
+    process.exit(1);
+  }
+};
+
+init(); 
