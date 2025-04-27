@@ -7,36 +7,45 @@ import { StockService } from '../../services/stock-service';
 import { IPortfolio } from '../../types/models/portfolio';
 import { DatabaseService } from '../../config/database';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
-import { AppError } from '../../utils/errors/app-error';
+import { AppError, ValidationError, NotFoundError, BusinessError } from '../../utils/errors/app-error';
+import { buyStockParamsSchema, buyStockBodySchema } from '../../types/schemas/handlers';
+import { handleZodError } from '../../middleware/zod-error-handler';
 
 /**
  * Handler to execute a stock purchase
  */
 const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   // Validate path parameters
-  const symbol = event.pathParameters?.symbol;
-  
-  if (!symbol) {
-    throw new AppError('Stock symbol is required', 400, 'VALIDATION_ERROR');
+  const paramsResult = buyStockParamsSchema.safeParse(event.pathParameters || {});
+  if (!paramsResult.success) {
+    throw handleZodError(paramsResult.error);
   }
+  const { symbol } = paramsResult.data;
   
   // Validate request body
   if (!event.body) {
-    throw new AppError('Request body is required', 400, 'VALIDATION_ERROR');
+    throw new ValidationError('Request body is required');
   }
   
-  const { price, quantity, userId } = JSON.parse(event.body);
-  
-  if (!price || !quantity || !userId) {
-    throw new AppError('Price, quantity, and userId are required', 400, 'VALIDATION_ERROR');
+  let parsedBody;
+  try {
+    parsedBody = JSON.parse(event.body);
+  } catch (error) {
+    throw new ValidationError('Invalid JSON in request body');
   }
+
+  const bodyResult = buyStockBodySchema.safeParse(parsedBody);
+  if (!bodyResult.success) {
+    throw handleZodError(bodyResult.error);
+  }
+  const { price, quantity, userId } = bodyResult.data;
   
   // Get stock details and current price from StockService
   const stockService = StockService.getInstance();
   const stockDetails = await stockService.getStockBySymbol(symbol);
   
   if (!stockDetails) {
-    throw new AppError('Stock not found', 404, 'NOT_FOUND');
+    throw new NotFoundError('Stock', symbol);
   }
 
   // Ensure currentPrice is a number
@@ -50,10 +59,8 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
   const maxDiff = numericCurrentPrice * 0.02;
   
   if (priceDiff > maxDiff) {
-    throw new AppError(
-      `Price must be within 2% of current price ($${numericCurrentPrice.toFixed(2)})`,
-      400,
-      'VALIDATION_ERROR'
+    throw new BusinessError(
+      `Price must be within 2% of current price ($${numericCurrentPrice.toFixed(2)})`
     );
   }
   
@@ -65,7 +72,7 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
   const user = await userRepository.findById(userId);
   
   if (!user) {
-    throw new AppError('User not found', 404, 'NOT_FOUND');
+    throw new NotFoundError('User', userId);
   }
   
   const portfolios = await portfolioRepository.findByUserId(userId);

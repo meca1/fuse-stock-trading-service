@@ -2,7 +2,9 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { StockService } from '../../services/stock-service';
 import AWS from 'aws-sdk';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
-import { AppError } from '../../utils/errors/app-error';
+import { AppError, AuthenticationError } from '../../utils/errors/app-error';
+import { apiKeySchema, listStocksQuerySchema } from '../../types/schemas/handlers';
+import { handleZodError } from '../../middleware/zod-error-handler';
 
 const dynamo = new AWS.DynamoDB.DocumentClient({
   region: process.env.AWS_REGION || 'us-east-1',
@@ -17,13 +19,25 @@ const CACHE_TTL = 120; // segundos
 const listStocksHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   // 1. Validar x-api-key
   const apiKey = event.headers['x-api-key'] || event.headers['X-API-Key'];
-  if (!apiKey || apiKey !== process.env.VENDOR_API_KEY) {
-    throw new AppError('Missing or invalid API key', 401, 'UNAUTHORIZED');
+  const apiKeyResult = apiKeySchema.safeParse(apiKey);
+  
+  if (!apiKeyResult.success) {
+    throw handleZodError(apiKeyResult.error);
   }
 
-  // 2. Parámetros de búsqueda y paginación
-  const nextToken = event.queryStringParameters?.nextToken;
-  const search = event.queryStringParameters?.search;
+  if (apiKey !== process.env.VENDOR_API_KEY) {
+    throw new AuthenticationError('Invalid API key');
+  }
+
+  // 2. Validar y extraer parámetros de búsqueda y paginación
+  const queryParams = event.queryStringParameters || {};
+  const queryResult = listStocksQuerySchema.safeParse(queryParams);
+  
+  if (!queryResult.success) {
+    throw handleZodError(queryResult.error);
+  }
+
+  const { nextToken, search } = queryResult.data;
 
   // 3. Intentar obtener de caché DynamoDB
   let cacheKey = 'all';

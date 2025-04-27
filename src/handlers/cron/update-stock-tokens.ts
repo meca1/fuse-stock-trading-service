@@ -2,9 +2,13 @@ import { Handler } from 'aws-lambda';
 import { DailyStockTokenService } from '../../services/daily-stock-token-service';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
 import { AppError } from '../../utils/errors/app-error';
+import { updateStockTokensEventSchema } from '../../types/schemas/handlers';
 
 const updateStockTokensHandler: Handler = async (event, context) => {
   console.log('Starting daily stock token update lambda', { event });
+  
+  // Validate event structure
+  updateStockTokensEventSchema.parse(event);
   
   const service = DailyStockTokenService.getInstance();
   await service.updateStockTokens().catch(error => {

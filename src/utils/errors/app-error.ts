@@ -1,12 +1,15 @@
 export class AppError extends Error {
+  public readonly details?: Record<string, unknown>;
+
   constructor(
     public readonly message: string,
     public readonly statusCode: number,
     public readonly code: string,
-    public readonly isOperational = true
+    details?: Record<string, unknown>
   ) {
     super(message);
     this.name = this.constructor.name;
+    this.details = details;
     Error.captureStackTrace(this, this.constructor);
   }
 }
@@ -22,11 +25,12 @@ export class NotFoundError extends AppError {
 }
 
 export class ValidationError extends AppError {
-  constructor(message: string) {
+  constructor(message: string, details?: Record<string, unknown>) {
     super(
       message,
       400,
-      'VALIDATION_ERROR'
+      'VALIDATION_ERROR',
+      details
     );
   }
 }
