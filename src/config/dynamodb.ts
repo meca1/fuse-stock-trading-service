@@ -45,16 +45,23 @@ export const initializeStockCacheTable = async (): Promise<void> => {
       ProvisionedThroughput: {
         ReadCapacityUnits: 5,
         WriteCapacityUnits: 5
-      },
-      // TTL para expiración automática de elementos
+      }
+    };
+
+    await dynamoDB.createTable(params).promise();
+    console.log(`Tabla ${STOCK_CACHE_TABLE} creada exitosamente`);
+
+    // Configurar TTL después de crear la tabla
+    const ttlParams = {
+      TableName: STOCK_CACHE_TABLE,
       TimeToLiveSpecification: {
         AttributeName: 'ttl',
         Enabled: true
       }
     };
 
-    await dynamoDB.createTable(params).promise();
-    console.log(`Tabla ${STOCK_CACHE_TABLE} creada exitosamente`);
+    await dynamoDB.updateTimeToLive(ttlParams).promise();
+    console.log(`TTL configurado para la tabla ${STOCK_CACHE_TABLE}`);
   } catch (error) {
     console.error('Error al inicializar la tabla de caché:', error);
     throw error;
