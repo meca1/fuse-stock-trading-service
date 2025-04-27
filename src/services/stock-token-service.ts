@@ -39,7 +39,13 @@ export class StockTokenService {
       };
 
       const result = await this.dynamoDb.get(params).promise();
-      return result.Item?.nextToken || null;
+      
+      // Si el Item existe y tiene nextToken (incluso si es vacío), lo devolvemos
+      if (result.Item && 'nextToken' in result.Item) {
+        return result.Item.nextToken;
+      }
+      
+      return null;
     } catch (error) {
       console.error(`Error getting token for symbol ${symbol}:`, error);
       throw error;

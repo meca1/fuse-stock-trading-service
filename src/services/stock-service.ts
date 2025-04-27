@@ -85,23 +85,35 @@ export class StockService {
    */
   public async getStockBySymbol(symbol: string): Promise<VendorStock | null> {
     try {
+      // Primero intentamos con el token específico del stock
       const token = await this.tokenService.getStockToken(symbol);
       console.log(`Token found for ${symbol}:`, token);
       
-      if (!token) {
-        console.warn(`No token found for symbol: ${symbol}`);
-        return null;
+      // Si hay token, buscamos en esa página específica
+      if (token) {
+        console.log(`Getting page with token for ${symbol}`);
+        const response = await this.vendorApi.listStocks(token);
+        console.log(`Response for ${symbol}:`, JSON.stringify(response.data));
+        
+        const stock = response.data.items.find(item => item.symbol === symbol);
+        if (stock) {
+          return {
+            symbol: stock.symbol,
+            name: stock.name,
+            price: stock.price,
+            exchange: stock.exchange || 'NYSE'
+          };
+        }
       }
 
-      console.log(`Getting page with token for ${symbol}`);
-      const response = await this.vendorApi.listStocks(token);
-      console.log(`Response for ${symbol}:`, JSON.stringify(response.data));
-      
+      // Si no hay token o no encontramos el stock en la página del token,
+      // buscamos en la primera página
+      console.log(`Searching ${symbol} in first page`);
+      const response = await this.vendorApi.listStocks();
       const stock = response.data.items.find(item => item.symbol === symbol);
-      console.log(`Stock found for ${symbol}:`, stock);
       
       if (!stock) {
-        console.warn(`Stock not found in page: ${symbol}`);
+        console.warn(`Stock not found: ${symbol}`);
         return null;
       }
 
@@ -204,35 +216,6 @@ export class StockService {
       };
     } catch (error) {
       console.error(`Error getting current price for ${symbol}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Updates a stock's price in the database
-   * @param symbol Stock symbol
-   * @param price New price
-   */
-  async updateStockPrice(symbol: string, price: number): Promise<void> {
-    try {
-      // Get the current token from the token service
-      const token = await this.tokenService.getStockToken(symbol);
-      if (!token) {
-        throw new Error(`No token found for symbol: ${symbol}`);
-      }
-
-      // Get the stock details from the vendor API
-      const response = await this.vendorApi.listStocks(token);
-      const stock = response.data.items.find(item => item.symbol === symbol);
-      
-      if (!stock) {
-        throw new Error(`Stock not found in page: ${symbol}`);
-      }
-
-      // No need to update in PostgreSQL anymore as we're using DynamoDB
-      console.log(`Updated price for ${symbol} to ${price}`);
-    } catch (error) {
-      console.error(`Error updating stock price for ${symbol}:`, error);
       throw error;
     }
   }
