@@ -26,8 +26,8 @@ interface UpdateUserDTO {
 export class UserService {
   private userRepository: UserRepository;
 
-  constructor(dbService: DatabaseService) {
-    this.userRepository = new UserRepository(dbService);
+  constructor() {
+    this.userRepository = new UserRepository();
   }
 
   /**

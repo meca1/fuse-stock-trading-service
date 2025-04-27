@@ -12,7 +12,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const nextToken = event.queryStringParameters?.nextToken;
     console.log(`Request includes nextToken: ${nextToken || 'none'}`);
     
-    const stockService = new StockService();
+    const stockService = StockService.getInstance();
     const { stocks, nextToken: newNextToken } = await stockService.listAllStocks(nextToken);
     
     return {
