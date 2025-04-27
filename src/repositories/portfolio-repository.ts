@@ -1,33 +1,8 @@
 import { DatabaseService } from '../config/database';
-import { IPortfolio, IPortfolioSummary } from '../types/models/portfolio';
+import { IPortfolio, IPortfolioSummary, IPortfolioStock, PortfolioStock, PortfolioSummaryResponse } from '../types/models/portfolio';
 import { ITransaction } from '../types/models/transaction';
-import { StockService } from '../services/stock-service';
-import { IPortfolioStock } from '../types/models/portfolio-stock';
 import { TransactionType } from '../types/common/enums';
-
-interface PortfolioStock {
-  symbol: string;
-  name: string;
-  quantity: number;
-  averagePrice: number;
-  currentPrice: number;
-  profitLoss: {
-    absolute: number;
-    percentage: number;
-  };
-}
-
-interface PortfolioSummaryResponse {
-  userId: string;
-  totalValue: number;
-  currency: string;
-  lastUpdated: string;
-  stocks: PortfolioStock[];
-  performance: {
-    lastMonth: number;
-    lastYear: number;
-  };
-}
+import { StockService } from '../services/stock-service';
 
 export class PortfolioRepository {
   private stockService: StockService;

@@ -1,11 +1,6 @@
 import { VendorApiClient } from './vendor/api-client';
-import { VendorStock, ListStocksResponse } from '../types/vendor';
+import { VendorStock, ListStocksResponse, EnhancedVendorStock } from '../types/models/stock';
 import { DynamoDB } from 'aws-sdk';
-
-interface EnhancedVendorStock extends VendorStock {
-  percentageChange?: number;
-  volume?: number;
-}
 
 /**
  * Service to handle stock-related operations and token management
@@ -95,8 +90,8 @@ export class StockService {
         currency: 'USD',
         lastUpdated: stock.timestamp,
         market: stock.exchange || 'NYSE',
-        percentageChange: (stock as EnhancedVendorStock).percentageChange,
-        volume: (stock as EnhancedVendorStock).volume,
+        percentageChange: stock.percentageChange,
+        volume: stock.volume,
       }));
 
       return {
@@ -134,7 +129,8 @@ export class StockService {
             symbol: stock.symbol,
             name: stock.name,
             price: stock.price,
-            exchange: stock.exchange || 'NYSE'
+            exchange: stock.exchange || 'NYSE',
+            timestamp: stock.timestamp
           };
         }
       }
@@ -154,7 +150,8 @@ export class StockService {
         symbol: stock.symbol,
         name: stock.name,
         price: stock.price,
-        exchange: stock.exchange || 'NYSE'
+        exchange: stock.exchange || 'NYSE',
+        timestamp: stock.timestamp
       };
     } catch (error) {
       console.error(`Error getting stock ${symbol}:`, error);
@@ -181,14 +178,14 @@ export class StockService {
    * @param startToken Optional token to start pagination from
    * @returns Object containing list of vendor stocks and nextToken for pagination
    */
-  private async fetchAllVendorStocks(maxPages: number = 1, startToken?: string): Promise<{ stocks: VendorStock[], nextToken?: string }> {
+  private async fetchAllVendorStocks(maxPages: number = 1, startToken?: string): Promise<{ stocks: EnhancedVendorStock[], nextToken?: string }> {
     try {
-      let allStocks: VendorStock[] = [];
+      let allStocks: EnhancedVendorStock[] = [];
       let nextToken: string | undefined = startToken;
       let pageCount = 0;
       do {
         const response: ListStocksResponse = await this.vendorApi.listStocks(nextToken);
-        const stocksWithPagination = response.data.items.map(stock => ({
+        const stocksWithPagination = response.data.items.map((stock: VendorStock) => ({
           ...stock,
           pageToken: response.data.nextToken || undefined,
           exchange: stock.exchange || 'NYSE'
