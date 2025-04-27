@@ -1,7 +1,5 @@
 import { DynamoDB } from 'aws-sdk';
 import { VendorApiClient } from './vendor/api-client';
-import { VendorStock } from '../types/vendor';
-import AWS from 'aws-sdk';
 
 export class DailyStockTokenService {
   private static instance: DailyStockTokenService;
@@ -13,15 +11,19 @@ export class DailyStockTokenService {
   private constructor() {
     this.vendorApi = new VendorApiClient();
     
-    // Configurar AWS SDK
-    AWS.config.update({
+    const config: DynamoDB.DocumentClient.DocumentClientOptions & DynamoDB.ClientConfiguration = {
       region: process.env.DYNAMODB_REGION || 'us-east-1',
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-      endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
-    });
+      credentials: {
+        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
+      }
+    };
+
+    if (process.env.DYNAMODB_ENDPOINT) {
+      config.endpoint = process.env.DYNAMODB_ENDPOINT;
+    }
     
-    this.dynamoDb = new DynamoDB.DocumentClient();
+    this.dynamoDb = new DynamoDB.DocumentClient(config);
     this.tableName = process.env.DYNAMODB_TABLE || 'stock_tokens';
   }
 
@@ -33,7 +35,6 @@ export class DailyStockTokenService {
   }
 
   public async updateStockTokens(): Promise<void> {
-    // Evitar múltiples ejecuciones simultáneas
     if (this.isRunning) {
       console.log('Update already in progress');
       return;
@@ -51,18 +52,16 @@ export class DailyStockTokenService {
         const stocks = response.data.items;
         const nextToken = response.data.nextToken;
 
-        // Procesar cada stock en el lote actual
-        for (const stock of stocks) {
-          if (!processedSymbols.has(stock.symbol)) {
-            // Guardamos el token actual que se usó para obtener este stock
-            await this.saveStockToken(stock.symbol, currentToken || '');
-            processedSymbols.add(stock.symbol);
-          }
-        }
+        await Promise.all(
+          stocks.map(async (stock) => {
+            if (!processedSymbols.has(stock.symbol)) {
+              await this.saveStockToken(stock.symbol, currentToken || '');
+              processedSymbols.add(stock.symbol);
+            }
+          })
+        );
 
-        // Actualizamos el token para la siguiente iteración
         currentToken = nextToken;
-
       } while (currentToken);
 
       console.log(`Successfully updated tokens for ${processedSymbols.size} stocks`);
@@ -75,7 +74,7 @@ export class DailyStockTokenService {
   }
 
   private async saveStockToken(symbol: string, nextToken: string): Promise<void> {
-    const params = {
+    const params: DynamoDB.DocumentClient.PutItemInput = {
       TableName: this.tableName,
       Item: {
         symbol,

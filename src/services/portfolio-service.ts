@@ -112,29 +112,28 @@ export class PortfolioService {
       const portfolios = await this.portfolioRepository.findByUserId(userId);
       if (!portfolios || portfolios.length === 0) {
         return {
-          portfolios: [],
-          totalValue: 0
+          status: "success",
+          data: {
+            userId: userId.toString(),
+            totalValue: 0,
+            currency: "USD",
+            lastUpdated: new Date().toISOString(),
+            stocks: [],
+            performance: {
+              lastMonth: 0,
+              lastYear: 0
+            }
+          }
         };
       }
 
-      const portfolioSummaries = await Promise.all(
-        portfolios.map(async (portfolio) => {
-          const { value, summary } = await this.portfolioRepository.getPortfolioValueAndSummary(portfolio.id.toString());
-          
-          return {
-            id: portfolio.id,
-            name: portfolio.name,
-            holdings: summary,
-            totalValue: value
-          };
-        })
-      );
-
-      const totalValue = portfolioSummaries.reduce((sum, portfolio) => sum + portfolio.totalValue, 0);
+      // Por ahora solo manejamos el primer portfolio del usuario
+      const portfolio = portfolios[0];
+      const summary = await this.portfolioRepository.getPortfolioValueAndSummary(portfolio.id.toString());
 
       return {
-        portfolios: portfolioSummaries,
-        totalValue
+        status: "success",
+        data: summary
       };
     } catch (error) {
       console.error('Error getting portfolio summary:', error);

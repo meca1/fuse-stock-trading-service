@@ -1,5 +1,4 @@
 import { DynamoDB } from 'aws-sdk';
-import AWS from 'aws-sdk';
 
 export class StockTokenService {
   private static instance: StockTokenService;
@@ -7,14 +6,19 @@ export class StockTokenService {
   private readonly tableName: string;
 
   private constructor() {
-    AWS.config.update({
+    const config: DynamoDB.DocumentClient.DocumentClientOptions & DynamoDB.ClientConfiguration = {
       region: process.env.DYNAMODB_REGION || 'us-east-1',
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-      endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
-    });
+      credentials: {
+        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
+      }
+    };
+
+    if (process.env.DYNAMODB_ENDPOINT) {
+      config.endpoint = process.env.DYNAMODB_ENDPOINT;
+    }
     
-    this.dynamoDb = new DynamoDB.DocumentClient();
+    this.dynamoDb = new DynamoDB.DocumentClient(config);
     this.tableName = process.env.DYNAMODB_TABLE || 'stock_tokens-local';
   }
 
@@ -27,7 +31,7 @@ export class StockTokenService {
 
   public async getStockToken(symbol: string): Promise<string | null> {
     try {
-      const params = {
+      const params: DynamoDB.DocumentClient.GetItemInput = {
         TableName: this.tableName,
         Key: {
           symbol
