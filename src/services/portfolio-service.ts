@@ -1,11 +1,11 @@
+import { PortfolioRepository } from '../repositories/portfolio-repository';
+import { TransactionRepository } from '../repositories/transaction-repository';
+import { IPortfolio, ITransaction, TransactionType, TransactionStatus } from '../models/interfaces';
 import { StockService } from './stock-service';
+import { VendorStock } from '../types/vendor';
 import { VendorApiClient } from './vendor/api-client';
 import { BuyStockParams, VendorStock } from '../types/vendor';
-import { TransactionStatus, TransactionType } from '../models/interfaces';
-import { IPortfolio, ITransaction, IStock, IUser } from '../models/interfaces';
-import { PortfolioRepository } from '../repositories/portfolio-repository';
-import { StockRepository } from '../repositories/stock-repository';
-import { TransactionRepository } from '../repositories/transaction-repository';
+import { IUser } from '../models/interfaces';
 import { UserRepository } from '../repositories/user-repository';
 import { DatabaseService } from '../config/database';
 
@@ -13,20 +13,26 @@ import { DatabaseService } from '../config/database';
  * Service to handle portfolio-related operations
  */
 export class PortfolioService {
+  private static instance: PortfolioService;
+  private portfolioRepository: PortfolioRepository;
+  private transactionRepository: TransactionRepository;
   private stockService: StockService;
   private vendorApi: VendorApiClient;
-  private portfolioRepository: PortfolioRepository;
-  private stockRepository: StockRepository;
-  private transactionRepository: TransactionRepository;
   private userRepository: UserRepository;
 
   constructor() {
+    this.portfolioRepository = new PortfolioRepository();
+    this.transactionRepository = new TransactionRepository();
     this.stockService = StockService.getInstance();
     this.vendorApi = new VendorApiClient();
-    this.portfolioRepository = new PortfolioRepository();
-    this.stockRepository = new StockRepository();
-    this.transactionRepository = new TransactionRepository();
     this.userRepository = new UserRepository();
+  }
+
+  public static getInstance(): PortfolioService {
+    if (!PortfolioService.instance) {
+      PortfolioService.instance = new PortfolioService();
+    }
+    return PortfolioService.instance;
   }
 
   /**
@@ -105,7 +111,7 @@ export class PortfolioService {
       }
 
       // Verify that the stock exists in our database
-      let stock = await this.stockRepository.findBySymbol(params.symbol);
+      let stock = await this.stockService.getStockBySymbol(params.symbol);
       if (!stock) {
         console.log(`Stock ${params.symbol} not found in database, will create it if purchase succeeds`);
         // We'll create it later if the purchase succeeds
@@ -137,7 +143,7 @@ export class PortfolioService {
         // Update or create the stock in our database
         if (stock) {
           // Update existing stock
-          const updatedStock = await this.stockRepository.update(stock.id, {
+          const updatedStock = await this.stockService.updateStock(stock.id, {
             current_price: currentPrice,
             last_updated: new Date()
           });
@@ -150,7 +156,7 @@ export class PortfolioService {
           }
         } else {
           // Create new stock
-          const newStock = await this.stockRepository.create({
+          const newStock = await this.stockService.createStock({
             symbol: params.symbol,
             name: params.symbol, // Usamos el símbolo como nombre por defecto
             current_price: currentPrice,
@@ -240,7 +246,7 @@ export class PortfolioService {
       }
 
       // Verify that the stock exists
-      const stock = await this.stockRepository.findById(stockId);
+      const stock = await this.stockService.getStockBySymbol(stockId.toString());
       if (!stock) {
         throw new Error(`Stock with ID ${stockId} not found`);
       }
@@ -344,32 +350,28 @@ export class PortfolioService {
     type: TransactionType
   ): Promise<ITransaction> {
     try {
-      // Get stock from vendor API using StockService
-      const stockService = StockService.getInstance();
-      const stock = await stockService.getStockBySymbol(symbol);
-      
+      // Get stock details from the stock service
+      const stock = await this.stockService.getStockBySymbol(symbol);
       if (!stock) {
         throw new Error(`Stock with symbol ${symbol} not found`);
       }
 
-      // Validate price is within range
-      if (!stockService.isValidPrice(stock.price, price)) {
+      // Validate price is within 2% of current price
+      const priceDiff = Math.abs(price - stock.price);
+      const maxDiff = stock.price * 0.02;
+      if (priceDiff > maxDiff) {
         throw new Error(`Price must be within 2% of current price ($${stock.price})`);
       }
 
-      // Create transaction
+      // Create the transaction
       const transaction = await this.transactionRepository.create({
         portfolio_id: portfolioId,
-        stock_symbol: symbol, // Use symbol instead of stock_id
-        type,
+        stock_symbol: symbol,
         quantity,
         price,
+        type,
         status: TransactionStatus.COMPLETED
       });
-
-      // Calcular y actualizar el valor total del portafolio
-      const totalValue = await this.calculatePortfolioValue(portfolioId);
-      await this.portfolioRepository.updateValueAndTimestamp(portfolioId, totalValue);
 
       return transaction;
     } catch (error) {
@@ -382,68 +384,72 @@ export class PortfolioService {
    * Devuelve el resumen del portafolio de un usuario con la estructura solicitada
    */
   async getUserPortfolioSummary(userId: number): Promise<any> {
-    // Obtener el portafolio del usuario
-    const portfolios = await this.portfolioRepository.findByUserId(userId);
-    if (!portfolios || portfolios.length === 0) {
-      throw new Error('Portfolio not found for user');
-    }
-    const portfolio = portfolios[0];
-    // Obtener todas las transacciones
-    const transactions = await this.transactionRepository.findByPortfolioId(portfolio.id);
-    // Agrupar por símbolo
-    const stockService = StockService.getInstance();
-    const stocksMap: Record<string, { quantity: number; totalCost: number; }> = {};
-    for (const tx of transactions) {
-      if (!stocksMap[tx.stock_symbol]) {
-        stocksMap[tx.stock_symbol] = { quantity: 0, totalCost: 0 };
+    try {
+      const portfolios = await this.portfolioRepository.findByUserId(userId);
+      if (!portfolios || portfolios.length === 0) {
+        return {
+          portfolios: [],
+          totalValue: 0
+        };
       }
-      if (tx.type === TransactionType.BUY) {
-        stocksMap[tx.stock_symbol].quantity += tx.quantity;
-        stocksMap[tx.stock_symbol].totalCost += tx.quantity * tx.price;
-      } else if (tx.type === TransactionType.SELL) {
-        stocksMap[tx.stock_symbol].quantity -= tx.quantity;
-        stocksMap[tx.stock_symbol].totalCost -= tx.quantity * tx.price; // Para el promedio, solo cuenta compras
-      }
-    }
-    // Para cada símbolo, obtener info del vendor y calcular métricas
-    let totalValue = 0;
-    const stocks = [];
-    for (const symbol of Object.keys(stocksMap)) {
-      const holding = stocksMap[symbol];
-      if (holding.quantity > 0) {
-        const stock = await stockService.getStockBySymbol(symbol);
-        if (stock) {
-          const averagePrice = holding.totalCost / holding.quantity;
-          const currentPrice = stock.price;
-          const profitAbs = (currentPrice - averagePrice) * holding.quantity;
-          const profitPct = averagePrice > 0 ? ((currentPrice - averagePrice) / averagePrice) * 100 : 0;
-          totalValue += holding.quantity * currentPrice;
-          stocks.push({
-            symbol: stock.symbol,
-            name: stock.name,
-            quantity: holding.quantity,
-            averagePrice: Number(averagePrice.toFixed(2)),
-            currentPrice: Number(currentPrice.toFixed(2)),
-            profitLoss: {
-              absolute: Number(profitAbs.toFixed(2)),
-              percentage: Number(profitPct.toFixed(2))
+
+      const portfolioSummaries = await Promise.all(
+        portfolios.map(async (portfolio) => {
+          const transactions = await this.transactionRepository.findByPortfolioId(portfolio.id);
+          const holdings: { [symbol: string]: { quantity: number; averagePrice: number } } = {};
+
+          // Calculate holdings
+          transactions.forEach((transaction) => {
+            const stockSymbol = transaction.stock_symbol;
+            if (!holdings[stockSymbol]) {
+              holdings[stockSymbol] = { quantity: 0, averagePrice: 0 };
             }
+
+            const multiplier = transaction.type === TransactionType.BUY ? 1 : -1;
+            holdings[stockSymbol].quantity += transaction.quantity * multiplier;
           });
-        }
-      }
+
+          // Get current prices for all holdings
+          const currentPrices = await Promise.all(
+            Object.keys(holdings).map(async (symbol) => {
+              try {
+                const price = await this.stockService.getCurrentPrice(symbol);
+                return { symbol, price: price.price };
+              } catch (error) {
+                console.error(`Error getting price for ${symbol}:`, error);
+                return { symbol, price: 0 };
+              }
+            })
+          );
+
+          // Calculate total value and create holdings summary
+          const holdingsSummary = currentPrices.map((priceInfo) => ({
+            symbol: priceInfo.symbol,
+            quantity: holdings[priceInfo.symbol].quantity,
+            currentPrice: priceInfo.price,
+            currentValue: holdings[priceInfo.symbol].quantity * priceInfo.price
+          }));
+
+          const totalValue = holdingsSummary.reduce((sum, holding) => sum + holding.currentValue, 0);
+
+          return {
+            id: portfolio.id,
+            name: portfolio.name,
+            holdings: holdingsSummary,
+            totalValue
+          };
+        })
+      );
+
+      const totalValue = portfolioSummaries.reduce((sum, portfolio) => sum + portfolio.totalValue, 0);
+
+      return {
+        portfolios: portfolioSummaries,
+        totalValue
+      };
+    } catch (error) {
+      console.error('Error getting portfolio summary:', error);
+      throw error;
     }
-    // Simular performance (puedes implementar histórico real si lo tienes)
-    const performance = {
-      lastMonth: 0,
-      lastYear: 0
-    };
-    return {
-      userId: userId,
-      totalValue: Number(totalValue.toFixed(2)),
-      currency: 'USD',
-      lastUpdated: portfolio.last_updated,
-      stocks,
-      performance
-    };
   }
 }

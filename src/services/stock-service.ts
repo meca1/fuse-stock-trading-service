@@ -1,9 +1,16 @@
 import { VendorApiClient } from './vendor/api-client';
 import { VendorStock, ListStocksResponse } from '../types/vendor';
-import { StockRepository } from '../repositories/stock-repository';
 import { IStock } from '../models/interfaces';
 import { VendorService } from './vendor-service';
 import { StockTokenService } from './stock-token-service';
+
+interface EnhancedVendorStock extends VendorStock {
+  current_price?: number;
+  last_updated?: string;
+  market?: string;
+  percentageChange?: number;
+  volume?: number;
+}
 
 /**
  * Service to handle stock-related operations
@@ -12,7 +19,6 @@ export class StockService {
   private static instance: StockService;
   private vendorApi: VendorApiClient;
   private cacheExpirationMs: number;
-  private stockRepository: StockRepository;
   private vendorService: VendorService;
   private tokenService: StockTokenService;
 
@@ -20,7 +26,6 @@ export class StockService {
     this.vendorApi = new VendorApiClient();
     // 5-minute cache (300,000 ms) since prices change every 5 minutes
     this.cacheExpirationMs = 300000;
-    this.stockRepository = new StockRepository();
     this.vendorService = VendorService.getInstance();
     this.tokenService = StockTokenService.getInstance();
   }
@@ -40,7 +45,6 @@ export class StockService {
    */
   async listAllStocks(nextToken?: string, search?: string): Promise<{ stocks: any[], nextToken?: string, totalItems?: number, lastUpdated?: string }> {
     try {
-      // Get stocks from the vendor with pagination
       const { stocks: vendorStocks, nextToken: newNextToken } = await this.fetchAllVendorStocks(1, nextToken);
       let filteredStocks = vendorStocks;
       if (search) {
@@ -50,17 +54,18 @@ export class StockService {
           (s.name && s.name.toLowerCase().includes(searchLower))
         );
       }
-      // Mapear a la estructura requerida
+      
       const stocks = filteredStocks.map(stock => ({
         symbol: stock.symbol,
         name: stock.name,
-        price: stock.price ?? stock.current_price,
+        price: stock.price,
         currency: 'USD',
-        lastUpdated: stock.timestamp || stock.last_updated ? new Date(stock.timestamp || stock.last_updated).toISOString() : undefined,
-        market: stock.exchange || stock.market,
-        percentageChange: stock.percentageChange,
-        volume: stock.volume,
+        lastUpdated: stock.timestamp,
+        market: stock.exchange || 'NYSE',
+        percentageChange: (stock as EnhancedVendorStock).percentageChange,
+        volume: (stock as EnhancedVendorStock).volume,
       }));
+
       return {
         stocks,
         nextToken: newNextToken,
@@ -80,7 +85,6 @@ export class StockService {
    */
   public async getStockBySymbol(symbol: string): Promise<VendorStock | null> {
     try {
-      // Obtener el token para el símbolo desde DynamoDB
       const token = await this.tokenService.getStockToken(symbol);
       console.log(`Token found for ${symbol}:`, token);
       
@@ -89,12 +93,10 @@ export class StockService {
         return null;
       }
 
-      // Obtener la página usando el token
       console.log(`Getting page with token for ${symbol}`);
       const response = await this.vendorApi.listStocks(token);
       console.log(`Response for ${symbol}:`, JSON.stringify(response.data));
       
-      // Buscar el stock en la página
       const stock = response.data.items.find(item => item.symbol === symbol);
       console.log(`Stock found for ${symbol}:`, stock);
       
@@ -136,18 +138,14 @@ export class StockService {
    */
   private async fetchAllVendorStocks(maxPages: number = 1, startToken?: string): Promise<{ stocks: VendorStock[], nextToken?: string }> {
     try {
-      // Eliminar dependencia a la base de datos: solo consultar al vendor
       let allStocks: VendorStock[] = [];
       let nextToken: string | undefined = startToken;
       let pageCount = 0;
       do {
-        // Get a page of stocks from the vendor API
         const response: ListStocksResponse = await this.vendorApi.listStocks(nextToken);
-        const currentPageToken = nextToken;
-        const nextPageToken = response.data.nextToken;
         const stocksWithPagination = response.data.items.map(stock => ({
           ...stock,
-          pageToken: nextPageToken || undefined,
+          pageToken: response.data.nextToken || undefined,
           exchange: stock.exchange || 'NYSE'
         }));
         allStocks = [...allStocks, ...stocksWithPagination];
@@ -168,49 +166,6 @@ export class StockService {
   }
 
   /**
-   * Updates the local database with the latest stock information from the vendor
-   * @param vendorStocks List of vendor stocks
-   */
-  private async updateLocalStocks(vendorStocks: VendorStock[]): Promise<void> {
-    if (vendorStocks.length === 0) {
-      return;
-    }
-    
-    try {
-      const stocks = vendorStocks.map(vendorStock => ({
-        symbol: vendorStock.symbol,
-        name: vendorStock.name,
-        current_price: vendorStock.price,
-        page_token: vendorStock.pageToken,
-        last_updated: new Date()
-      }));
-      
-      await this.stockRepository.upsertMany(stocks);
-      
-      console.log(`Updated ${vendorStocks.length} stocks in the database with pagination information`);
-    } catch (error) {
-      console.error('Error updating local stocks:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Updates or creates a stock in the database
-   * @param vendorStock Vendor stock
-   * @returns Updated or created stock
-   */
-  private async updateOrCreateStock(vendorStock: VendorStock): Promise<IStock> {
-    const stock = {
-      symbol: vendorStock.symbol,
-      name: vendorStock.name,
-      current_price: vendorStock.price,
-      last_updated: new Date()
-    };
-    
-    return await this.stockRepository.upsert(stock);
-  }
-
-  /**
    * Checks if a stock's cache is expired
    * @param lastUpdated Last update date
    * @returns true if the cache is expired, false otherwise
@@ -226,7 +181,6 @@ export class StockService {
 
   public async getCurrentPrice(symbol: string): Promise<{ price: number }> {
     try {
-      // Obtener el token para el símbolo desde DynamoDB
       const token = await this.tokenService.getStockToken(symbol);
       console.log(`Token found for ${symbol}:`, token);
       
@@ -234,12 +188,10 @@ export class StockService {
         throw new Error(`No token found for symbol: ${symbol}`);
       }
 
-      // Obtener la página usando el token
       console.log(`Getting page with token for ${symbol}`);
       const response = await this.vendorApi.listStocks(token);
       console.log(`Response for ${symbol}:`, JSON.stringify(response.data));
       
-      // Buscar el stock en la página
       const stock = response.data.items.find(item => item.symbol === symbol);
       console.log(`Stock found for ${symbol}:`, stock);
       
@@ -263,21 +215,22 @@ export class StockService {
    */
   async updateStockPrice(symbol: string, price: number): Promise<void> {
     try {
-      const stock = await this.stockRepository.findBySymbol(symbol);
-      if (!stock) {
-        throw new Error(`Stock with symbol ${symbol} not found`);
+      // Get the current token from the token service
+      const token = await this.tokenService.getStockToken(symbol);
+      if (!token) {
+        throw new Error(`No token found for symbol: ${symbol}`);
       }
 
-      // Get the current page token from the vendor
-      const response = await this.vendorService.getStocks(stock.page_token || undefined);
+      // Get the stock details from the vendor API
+      const response = await this.vendorApi.listStocks(token);
+      const stock = response.data.items.find(item => item.symbol === symbol);
       
-      await this.stockRepository.upsert({
-        symbol,
-        name: stock.name,
-        current_price: price,
-        page_token: response.data.nextToken || stock.page_token || '', // Use new token if available, otherwise keep existing
-        last_updated: new Date()
-      });
+      if (!stock) {
+        throw new Error(`Stock not found in page: ${symbol}`);
+      }
+
+      // No need to update in PostgreSQL anymore as we're using DynamoDB
+      console.log(`Updated price for ${symbol} to ${price}`);
     } catch (error) {
       console.error(`Error updating stock price for ${symbol}:`, error);
       throw error;
