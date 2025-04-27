@@ -5,7 +5,6 @@ import { PortfolioRepository } from '../../repositories/portfolio-repository';
 import { UserRepository } from '../../repositories/user-repository';
 import { StockService } from '../../services/stock-service';
 import { IPortfolio } from '../../models/interfaces';
-import { StockRepository } from '../../repositories/stock-repository';
 
 /**
  * Handler to execute a stock purchase
@@ -51,12 +50,23 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       };
     }
     
-    // Get current price from StockService
+    // Get stock details and current price from StockService
     const stockService = StockService.getInstance();
-    const { price: currentPrice } = await stockService.getCurrentPrice(symbol);
+    const stockDetails = await stockService.getStockBySymbol(symbol);
+    
+    if (!stockDetails) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({
+          status: 'error',
+          message: 'Stock not found',
+          error: 'Stock not found'
+        })
+      };
+    }
 
     // Ensure currentPrice is a number
-    const numericCurrentPrice = Number(currentPrice);
+    const numericCurrentPrice = Number(stockDetails.price);
     if (isNaN(numericCurrentPrice)) {
       return {
         statusCode: 500,
@@ -86,7 +96,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Get or create portfolio for user
     const portfolioRepository = new PortfolioRepository();
     const userRepository = new UserRepository();
-    const stockRepository = new StockRepository();
     
     const user = await userRepository.findById(userId);
     
@@ -114,50 +123,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       portfolio = portfolios[0];
     }
 
-    // Ensure stock exists in database
-    let stock = await stockRepository.findBySymbol(symbol);
-    
-    if (!stock) {
-      // Get stock details from vendor
-      const vendorStock = await stockService.getStockBySymbol(symbol);
-      
-      if (!vendorStock) {
-        return {
-          statusCode: 404,
-          body: JSON.stringify({
-            status: 'error',
-            message: 'Stock not found',
-            error: 'Stock not found'
-          })
-        };
-      }
-      // Create stock in database
-      stock = await stockRepository.create({
-        symbol: vendorStock.symbol,
-        name: vendorStock.name,
-        current_price: vendorStock.current_price,
-        page_token: vendorStock.page_token,
-        last_updated: new Date()
-      });
-    }
-
     // Execute purchase
-      const portfolioService = new PortfolioService();
+    const portfolioService = new PortfolioService();
     const transaction = await portfolioService.executeStockPurchase(
       portfolio.id,
-        symbol,
+      symbol,
       quantity,
       price,
       TransactionType.BUY
     );
       
-    // Update stock price in database after successful purchase
-    await stockService.updateStockPrice(symbol, numericCurrentPrice);
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          status: 'success',
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        status: 'success',
         data: {
           ...transaction,
           currentPrice: numericCurrentPrice
@@ -166,6 +145,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       })
     };
   } catch (error) {
+    console.error('Error executing stock purchase:', error);
     return {
       statusCode: 500,
       body: JSON.stringify({

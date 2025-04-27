@@ -126,4 +126,9 @@ export class VendorApiClient {
       };
     }
   }
+
+  async getStock(symbol: string, token?: string | null) {
+    const params = token ? { token } : {};
+    return this.client.get(`/stocks/${symbol}`, { params });
+  }
 }

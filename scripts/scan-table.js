@@ -1,24 +1,26 @@
 const AWS = require('aws-sdk');
 
-// Configurar el cliente de DynamoDB
-const dynamodb = new AWS.DynamoDB.DocumentClient({
+// Configure AWS
+AWS.config.update({
   region: 'us-east-1',
   endpoint: 'http://localhost:8000',
   accessKeyId: 'local',
   secretAccessKey: 'local'
 });
 
-async function scanTable() {
-  const params = {
-    TableName: 'stock_tokens-local'
-  };
+const dynamodb = new AWS.DynamoDB.DocumentClient();
 
+async function scanTable() {
   try {
+    const params = {
+      TableName: 'stock_tokens-local'
+    };
+
     const result = await dynamodb.scan(params).promise();
-    console.log('Items encontrados:', JSON.stringify(result.Items, null, 2));
-    console.log('Total de items:', result.Count);
+    console.log('Found items:', JSON.stringify(result.Items, null, 2));
+    console.log('Total count:', result.Count);
   } catch (error) {
-    console.error('Error escaneando la tabla:', error);
+    console.error('Error scanning table:', error);
   }
 }
 

@@ -3,6 +3,7 @@ import { VendorStock, ListStocksResponse } from '../types/vendor';
 import { StockRepository } from '../repositories/stock-repository';
 import { IStock } from '../models/interfaces';
 import { VendorService } from './vendor-service';
+import { StockTokenService } from './stock-token-service';
 
 /**
  * Service to handle stock-related operations
@@ -13,6 +14,7 @@ export class StockService {
   private cacheExpirationMs: number;
   private stockRepository: StockRepository;
   private vendorService: VendorService;
+  private tokenService: StockTokenService;
 
   private constructor() {
     this.vendorApi = new VendorApiClient();
@@ -20,6 +22,7 @@ export class StockService {
     this.cacheExpirationMs = 300000;
     this.stockRepository = new StockRepository();
     this.vendorService = VendorService.getInstance();
+    this.tokenService = StockTokenService.getInstance();
   }
 
   public static getInstance(): StockService {
@@ -60,89 +63,39 @@ export class StockService {
    * @param symbol Stock symbol
    * @returns Stock or null if it doesn't exist
    */
-  async getStockBySymbol(symbol: string): Promise<IStock | null> {
+  public async getStockBySymbol(symbol: string): Promise<VendorStock | null> {
     try {
-      // Buscar el stock en la base de datos
-      let stock = await this.stockRepository.findBySymbol(symbol);
+      // Obtener el token para el símbolo desde DynamoDB
+      const token = await this.tokenService.getStockToken(symbol);
+      console.log(`Token found for ${symbol}:`, token);
       
-      // Definimos los tiempos límite para la caché (en milisegundos)
-      const FIVE_MINUTES_MS = 5 * 60 * 1000;
-      const FOUR_MINUTES_MS = 4 * 60 * 1000;
-      
-      // Verificamos si el stock existe y calculamos el tiempo desde la última actualización
-      let timeSinceLastUpdate = 0;
-      if (stock && stock.last_updated) {
-        timeSinceLastUpdate = Date.now() - new Date(stock.last_updated).getTime();
+      if (!token) {
+        console.warn(`No token found for symbol: ${symbol}`);
+        return null;
       }
+
+      // Obtener la página usando el token
+      console.log(`Getting page with token for ${symbol}`);
+      const response = await this.vendorApi.listStocks(token);
+      console.log(`Response for ${symbol}:`, JSON.stringify(response.data));
       
-      // Si encontramos el stock y el tiempo desde la última actualización es menor a 5 minutos,
-      // lo devolvemos inmediatamente
-      if (stock && timeSinceLastUpdate <= FIVE_MINUTES_MS) {
-        return stock;
+      // Buscar el stock en la página
+      const stock = response.data.items.find(item => item.symbol === symbol);
+      console.log(`Stock found for ${symbol}:`, stock);
+      
+      if (!stock) {
+        console.warn(`Stock not found in page: ${symbol}`);
+        return null;
       }
-      
-      // Para pruebas, si el símbolo es AAPL, devolvemos un precio fijo para evitar timeouts
-      if (symbol === 'AAPL') {
-        // Si ya existe el stock, actualizamos su precio
-        if (stock) {
-          await this.stockRepository.update(stock.id, {
-            current_price: 175.50,
-            last_updated: new Date()
-          });
-          
-          // Devolvemos el stock actualizado
-          return await this.stockRepository.findBySymbol(symbol);
-        } else {
-          // Creamos un nuevo stock con precio fijo
-          const newStock = await this.stockRepository.create({
-            symbol: 'AAPL',
-            name: 'Apple Inc.',
-            current_price: 175.50,
-            last_updated: new Date()
-          });
-          
-          return newStock;
-        }
-      }
-      
-      // Si el stock existe y tiene información de paginación y el tiempo desde la última actualización
-      // es mayor a 4 minutos pero menor a 5 minutos, usamos el token de paginación almacenado
-      if (stock && stock.page_token && timeSinceLastUpdate > FOUR_MINUTES_MS && timeSinceLastUpdate <= FIVE_MINUTES_MS) {
-        try {
-          const pageResponse = await this.vendorApi.listStocks(stock.page_token);
-          const stockInPage = pageResponse.data.items.find(s => s.symbol === symbol);
-          
-          if (stockInPage) {
-            // Actualizamos el stock con la información de la página
-            const stockToUpdate: VendorStock = {
-              ...stockInPage,
-              pageToken: stock.page_token
-            };
-            await this.updateLocalStocks([stockToUpdate]);
-            return await this.stockRepository.findBySymbol(symbol);
-          }
-        } catch (error) {
-          // Si hay un error al usar el token almacenado, continuamos con la búsqueda normal
-        }
-      }
-      
-      // Para otros símbolos o si no se pudo usar el token de paginación, buscamos en la primera página
-      const firstPageResponse = await this.vendorApi.listStocks();
-      const firstPageStock = firstPageResponse.data.items.find(s => s.symbol === symbol);
-      
-      if (firstPageStock) {
-        // Actualizamos el stock con la información de la primera página
-        const stockToUpdate: VendorStock = {
-          ...firstPageStock,
-          pageToken: firstPageResponse.data.nextToken
-        };
-        await this.updateLocalStocks([stockToUpdate]);
-        return await this.stockRepository.findBySymbol(symbol);
-      }
-      
-      // Si no encontramos el stock, devolvemos lo que tengamos o null
-      return stock;
+
+      return {
+        symbol: stock.symbol,
+        name: stock.name,
+        price: stock.price,
+        exchange: stock.exchange || 'NYSE'
+      };
     } catch (error) {
+      console.error(`Error getting stock ${symbol}:`, error);
       throw error;
     }
   }
@@ -293,98 +246,34 @@ export class StockService {
     return (now - lastUpdatedTime) > this.cacheExpirationMs;
   }
 
-  async getCurrentPrice(symbol: string): Promise<{ price: number; nextToken: string }> {
+  public async getCurrentPrice(symbol: string): Promise<{ price: number }> {
     try {
-      // First, check if the stock exists in our database
-      const stock = await this.stockRepository.findBySymbol(symbol);
+      // Obtener el token para el símbolo desde DynamoDB
+      const token = await this.tokenService.getStockToken(symbol);
+      console.log(`Token found for ${symbol}:`, token);
       
-      // Define time limits in milliseconds
-      const FIVE_MINUTES_MS = 5 * 60 * 1000;
-      const FOUR_MINUTES_MS = 4 * 60 * 1000;
-      
-      // Calculate time since last update
-      let timeSinceLastUpdate = 0;
-      if (stock && stock.last_updated) {
-        timeSinceLastUpdate = Date.now() - new Date(stock.last_updated).getTime();
-      }
-      
-      // If we have the stock and it was updated less than 4 minutes ago, return the cached price
-      if (stock && timeSinceLastUpdate <= FOUR_MINUTES_MS) {
-        return {
-          price: stock.current_price,
-          nextToken: stock.page_token || ''
-        };
-      }
-      
-      // If we have the stock and a page token, and it's been more than 4 minutes but less than 5,
-      // try to refresh using the stored page token
-      if (stock && stock.page_token && timeSinceLastUpdate > FOUR_MINUTES_MS && timeSinceLastUpdate <= FIVE_MINUTES_MS) {
-        try {
-          const response = await this.vendorService.getStocks(stock.page_token);
-          const stockData = response.data.items.find((item: any) => item.symbol === symbol);
-          
-          if (stockData) {
-            // Update the stock with the new price but keep the same page token
-            await this.stockRepository.upsert({
-              symbol,
-              name: stockData.name,
-              current_price: stockData.price,
-              page_token: stock.page_token, // Keep the same page token
-              last_updated: new Date()
-            });
-            
-            return {
-              price: stockData.price,
-              nextToken: response.data.nextToken || ''
-            };
-          }
-        } catch (error) {
-          console.warn(`Error using stored page token for ${symbol}:`, error);
-          // If there's an error with the stored token, continue with paginated search
-        }
+      if (!token) {
+        throw new Error(`No token found for symbol: ${symbol}`);
       }
 
-      // If we don't have the stock or need to refresh, perform paginated search
-      let currentToken: string | undefined;
-      let previousToken: string | undefined;
-      let foundStock: any = null;
-      let foundNextToken: string = '';
-
-      do {
-        const response = await this.vendorService.getStocks(currentToken);
-        
-        // Look for the stock in the current page
-        const stockInPage = response.data.items.find((item: any) => item.symbol === symbol);
-        
-        if (stockInPage) {
-          foundStock = stockInPage;
-          foundNextToken = response.data.nextToken || '';
-          break;
-        }
-        
-        previousToken = currentToken;
-        currentToken = response.data.nextToken;
-      } while (currentToken);
-
-      if (!foundStock) {
-        throw new Error(`Stock with symbol ${symbol} not found in vendor API`);
+      // Obtener la página usando el token
+      console.log(`Getting page with token for ${symbol}`);
+      const response = await this.vendorApi.listStocks(token);
+      console.log(`Response for ${symbol}:`, JSON.stringify(response.data));
+      
+      // Buscar el stock en la página
+      const stock = response.data.items.find(item => item.symbol === symbol);
+      console.log(`Stock found for ${symbol}:`, stock);
+      
+      if (!stock) {
+        throw new Error(`Stock not found in page: ${symbol}`);
       }
-
-      // Update or create the stock in our database with the previous token that led us to it
-      await this.stockRepository.upsert({
-        symbol,
-        name: foundStock.name,
-        current_price: foundStock.price,
-        page_token: previousToken || '', // Store the previous token that led us to this stock
-        last_updated: new Date()
-      });
 
       return {
-        price: foundStock.price,
-        nextToken: foundNextToken
+        price: stock.price
       };
     } catch (error) {
-      console.error('Error getting current price:', error);
+      console.error(`Error getting current price for ${symbol}:`, error);
       throw error;
     }
   }
