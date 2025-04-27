@@ -9,7 +9,7 @@ export class DailyStockTokenService {
   private isRunning = false;
 
   private constructor() {
-    this.vendorApi = new VendorApiClient();
+    this.vendorApi = VendorApiClient.getInstance();
     
     const config: DynamoDB.DocumentClient.DocumentClientOptions & DynamoDB.ClientConfiguration = {
       region: process.env.DYNAMODB_REGION || 'us-east-1',

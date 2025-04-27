@@ -22,7 +22,7 @@ export class PortfolioService {
     this.portfolioRepository = new PortfolioRepository();
     this.transactionRepository = new TransactionRepository();
     this.stockService = StockService.getInstance();
-    this.vendorApi = new VendorApiClient();
+    this.vendorApi = VendorApiClient.getInstance();
     this.userRepository = new UserRepository();
   }
 
