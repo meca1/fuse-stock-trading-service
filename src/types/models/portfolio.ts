@@ -1,7 +1,13 @@
+import { IPortfolioStock } from './portfolio-stock';
+
 export interface IPortfolio {
   id: number;
   name: string;
-  user_id: number;
+  description?: string;
+  user_id: string;
+  total_value?: number;
+  total_profit_loss?: number;
+  stocks?: IPortfolioStock[];
   created_at?: Date;
   updated_at?: Date;
 }

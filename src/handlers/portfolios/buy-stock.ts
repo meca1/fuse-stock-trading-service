@@ -5,6 +5,7 @@ import { PortfolioRepository } from '../../repositories/portfolio-repository';
 import { UserRepository } from '../../repositories/user-repository';
 import { StockService } from '../../services/stock-service';
 import { IPortfolio } from '../../types/models/portfolio';
+import { DatabaseService } from '../../config/database';
 
 /**
  * Handler to execute a stock purchase
@@ -94,8 +95,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     
     // Get or create portfolio for user
-    const portfolioRepository = new PortfolioRepository();
-    const userRepository = new UserRepository();
+    const dbService = await DatabaseService.getInstance();
+    const portfolioRepository = new PortfolioRepository(dbService);
+    const userRepository = new UserRepository(dbService);
     
     const user = await userRepository.findById(userId);
     
@@ -124,26 +126,26 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     // Execute purchase
-    const portfolioService = new PortfolioService();
+    const portfolioService = await PortfolioService.getInstance();
     const transaction = await portfolioService.executeStockPurchase(
       portfolio.id,
-      symbol,
+        symbol,
       quantity,
       price,
       TransactionType.BUY
     );
       
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        status: 'success',
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          status: 'success',
         data: {
           ...transaction,
           currentPrice: numericCurrentPrice
         },
         message: 'Purchase executed successfully'
       })
-    };
+      };
   } catch (error) {
     console.error('Error executing stock purchase:', error);
     return {

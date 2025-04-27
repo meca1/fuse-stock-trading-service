@@ -6,29 +6,35 @@ import { TransactionType, TransactionStatus } from '../types/common/enums';
 import { StockService } from './stock-service';
 import { VendorApiClient } from './vendor/api-client';
 import { UserRepository } from '../repositories/user-repository';
+import { DatabaseService } from '../config/database';
 
 /**
  * Service to handle portfolio-related operations
  */
 export class PortfolioService {
-  private static instance: PortfolioService;
-  private portfolioRepository: PortfolioRepository;
-  private transactionRepository: TransactionRepository;
-  private stockService: StockService;
-  private vendorApi: VendorApiClient;
-  private userRepository: UserRepository;
+  private static instance: PortfolioService | null = null;
+  private portfolioRepository!: PortfolioRepository;
+  private transactionRepository!: TransactionRepository;
+  private stockService!: StockService;
+  private vendorApi!: VendorApiClient;
+  private userRepository!: UserRepository;
+  private dbService!: DatabaseService;
 
-  constructor() {
-    this.portfolioRepository = new PortfolioRepository();
-    this.transactionRepository = new TransactionRepository();
+  private constructor() {}
+
+  private async initializeServices() {
+    this.dbService = await DatabaseService.getInstance();
+    this.portfolioRepository = new PortfolioRepository(this.dbService);
+    this.transactionRepository = new TransactionRepository(this.dbService);
     this.stockService = StockService.getInstance();
     this.vendorApi = VendorApiClient.getInstance();
-    this.userRepository = new UserRepository();
+    this.userRepository = new UserRepository(this.dbService);
   }
 
-  public static getInstance(): PortfolioService {
+  public static async getInstance(): Promise<PortfolioService> {
     if (!PortfolioService.instance) {
       PortfolioService.instance = new PortfolioService();
+      await PortfolioService.instance.initializeServices();
     }
     return PortfolioService.instance;
   }
@@ -36,7 +42,7 @@ export class PortfolioService {
   /**
    * Gets all portfolios for a user
    */
-  async getUserPortfolios(userId: number): Promise<IPortfolio[]> {
+  async getUserPortfolios(userId: string): Promise<IPortfolio[]> {
     try {
       const portfolios = await this.portfolioRepository.findByUserId(userId);
       return portfolios;
@@ -49,7 +55,7 @@ export class PortfolioService {
   /**
    * Creates a new portfolio for a user
    */
-  async createPortfolio(userId: number, name: string): Promise<IPortfolio> {
+  async createPortfolio(userId: string, name: string): Promise<IPortfolio> {
     try {
       const user = await this.userRepository.findById(userId);
       if (!user) {
@@ -109,14 +115,14 @@ export class PortfolioService {
   /**
    * Gets a summary of all portfolios for a user
    */
-  async getUserPortfolioSummary(userId: number): Promise<any> {
+  async getUserPortfolioSummary(userId: string): Promise<any> {
     try {
       const portfolios = await this.portfolioRepository.findByUserId(userId);
       if (!portfolios || portfolios.length === 0) {
         return {
           status: "success",
           data: {
-            userId: userId.toString(),
+            userId,
             totalValue: 0,
             currency: "USD",
             lastUpdated: new Date().toISOString(),
@@ -131,7 +137,7 @@ export class PortfolioService {
 
       // Por ahora solo manejamos el primer portfolio del usuario
       const portfolio = portfolios[0];
-      const summary = await this.portfolioRepository.getPortfolioValueAndSummary(portfolio.id.toString());
+      const summary = await this.portfolioRepository.getPortfolioValueAndSummary(portfolio.id);
 
       return {
         status: "success",
