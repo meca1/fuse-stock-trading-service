@@ -5,7 +5,9 @@ export class PortfolioRepository {
   constructor(private readonly dbService: DatabaseService) {}
 
   /**
-   * Encuentra un portfolio por su ID
+   * Finds a portfolio by its unique ID.
+   * @param id - The ID of the portfolio to find.
+   * @returns The found portfolio or null if it does not exist.
    */
   async findById(id: number): Promise<IPortfolio | null> {
     const result = await this.dbService.query<IPortfolio>(
@@ -16,7 +18,9 @@ export class PortfolioRepository {
   }
 
   /**
-   * Lista todos los portfolios de un usuario
+   * Lists all portfolios associated with a user.
+   * @param userId - The user ID who owns the portfolios.
+   * @returns An array of portfolios belonging to the user.
    */
   async findByUserId(userId: string): Promise<IPortfolio[]> {
     const result = await this.dbService.query<IPortfolio>(
@@ -27,7 +31,9 @@ export class PortfolioRepository {
   }
 
   /**
-   * Crea un nuevo portfolio
+   * Creates a new portfolio in the database.
+   * @param portfolio - Object with the new portfolio data (without id, created_at, or updated_at).
+   * @returns The created portfolio with all its fields.
    */
   async create(portfolio: Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>): Promise<IPortfolio> {
     const result = await this.dbService.query<IPortfolio>(
@@ -39,39 +45,11 @@ export class PortfolioRepository {
     return result.rows[0];
   }
 
-  async update(id: number, portfolio: Partial<IPortfolio>): Promise<IPortfolio> {
-    const updates: string[] = [];
-    const values: any[] = [];
-    let paramCount = 1;
-
-    Object.entries(portfolio).forEach(([key, value]) => {
-      if (value !== undefined && !['id', 'created_at', 'updated_at'].includes(key)) {
-        updates.push(`${key} = $${paramCount}`);
-        values.push(value);
-        paramCount++;
-      }
-    });
-
-    values.push(id);
-    const result = await this.dbService.query<IPortfolio>(
-      `UPDATE portfolios 
-       SET ${updates.join(', ')}, updated_at = NOW() 
-       WHERE id = $${paramCount} 
-       RETURNING *`,
-      values
-    );
-    return result.rows[0];
-  }
-
-  async delete(id: number): Promise<void> {
-    await this.dbService.query(
-      'DELETE FROM portfolios WHERE id = $1',
-      [id]
-    );
-  }
-
   /**
-   * Obtiene el resumen de las acciones en un portfolio
+   * Gets a summary of the stocks in a portfolio, including quantity and total cost per symbol.
+   * Only includes stocks with a positive net quantity.
+   * @param portfolioId - The ID of the portfolio to query.
+   * @returns An array with the summary for each stock (symbol, quantity, total cost).
    */
   async getPortfolioStockSummary(portfolioId: number): Promise<{
     symbol: string;
@@ -100,7 +78,10 @@ export class PortfolioRepository {
   }
 
   /**
-   * Actualiza el valor total y el timestamp del portfolio
+   * Updates the total value and the updated_at timestamp of a portfolio.
+   * @param id - The ID of the portfolio to update.
+   * @param totalValue - The new total value of the portfolio.
+   * @returns void
    */
   async updateValueAndTimestamp(id: number, totalValue: number): Promise<void> {
     await this.dbService.query(
