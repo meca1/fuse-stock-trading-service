@@ -1,13 +1,8 @@
 import * as AWS from 'aws-sdk';
 import * as nodemailer from 'nodemailer';
-import { ReportData } from './service-types';
+import { ReportData, EmailParams } from './service-types';
 
 // Interfaces
-interface EmailParams {
-  recipients: string[];
-  subject: string;
-  reportData: ReportData;
-}
 
 /**
  * Servicio para el envío de emails

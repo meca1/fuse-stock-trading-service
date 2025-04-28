@@ -249,6 +249,25 @@ serverless deploy --stage prod
 - Check console logs for detailed error information
 - Verify vendor API key is correctly set
 
+## Common Issues and Fixes
+
+### Build Error: ReportData not exported
+If you encounter the following error during build (especially when building in Docker):
+```
+src/services/email-service.ts(3,10): error TS2459: Module '"./report-service"' declares 'ReportData' locally, but it is not exported.
+```
+
+This occurs because `email-service.ts` is trying to import the `ReportData` interface from the wrong module. 
+
+**Fix**: Ensure `email-service.ts` imports from `service-types.ts` instead of `report-service.ts`:
+```typescript
+// Incorrect
+import { ReportData } from './report-service';
+
+// Correct
+import { ReportData, EmailParams } from './service-types';
+```
+
 For a detailed technical explanation of the architecture and design decisions, please refer to [REPORT.md](REPORT.md).
 
 ## License
