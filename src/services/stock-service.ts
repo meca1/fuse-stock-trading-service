@@ -173,7 +173,7 @@ export class StockService {
       
       let currentToken: string | undefined = undefined;
       let pageCount = 0;
-      const MAX_PAGES = 2; // Reducido de 5 a 2 páginas para mejorar el rendimiento
+      const MAX_PAGES = 10; // Aumentado de 2 a 10 páginas para mejorar la búsqueda
       
       do {
         console.log(`Searching ${symbol} in page ${pageCount + 1}`);
