@@ -118,9 +118,10 @@ const listPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGa
     },
     body: JSON.stringify({
       status: 'success',
-      data: summary,
+      data: summary.data,
       metadata: {
-        cached: !!summary.isCached
+        cached: summary.fromCache,
+        timestamp: summary.timestamp
       }
     })
   };

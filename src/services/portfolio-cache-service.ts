@@ -119,35 +119,33 @@ export class PortfolioCacheService {
    */
   async cacheUserPortfolioSummary(userId: string, data: any): Promise<void> {
     if (!this.isEnabled) {
-      console.log('[PORTFOLIO CACHE] Cache is disabled, skipping write');
+      console.log('Cache disabled. Skipping cacheUserPortfolioSummary.');
       return;
     }
-    
+
     try {
-      console.log(`[PORTFOLIO CACHE] Caching portfolio for user: ${userId}`);
-      const cacheKey = this.generateUserPortfolioKey(userId);
-      const ttl = Math.floor(Date.now() / 1000) + this.CACHE_TTL;
+      await this.checkTableExists();
+      const key = this.generateUserPortfolioKey(userId);
       
-      await this.dynamo.put({
+      // Ensure data has a timestamp if not provided
+      if (!data.timestamp) {
+        data.timestamp = new Date().toISOString();
+      }
+      
+      const params = {
         TableName: this.tableName,
         Item: {
-          key: cacheKey,
+          key,
           data,
-          ttl,
-          cacheType: 'user-portfolio',
-          userId,
-          timestamp: new Date().toISOString()
-        },
-      }).promise();
+          ttl: Math.floor(Date.now() / 1000) + this.CACHE_TTL
+        }
+      };
       
-      console.log(`[PORTFOLIO CACHE] Successfully cached portfolio for user: ${userId}`, {
-        expiresAt: new Date(ttl * 1000).toISOString(),
-        ttl
-      });
+      await this.dynamo.put(params).promise();
+      console.log(`Cached portfolio summary for user: ${userId}`);
     } catch (error) {
-      console.error(`[PORTFOLIO CACHE ERROR] Error caching portfolio for user ${userId}:`, error);
-      // If we can't cache, disable the cache to avoid repeated failures
-      this.isEnabled = false;
+      console.error('Error caching user portfolio summary:', error);
+      // No re-throw, cache errors shouldn't fail the operation
     }
   }
 
@@ -188,32 +186,33 @@ export class PortfolioCacheService {
    */
   async cachePortfolioSummary(portfolioId: number, data: any): Promise<void> {
     if (!this.isEnabled) {
-      console.log('[PORTFOLIO CACHE] Cache is disabled, skipping write');
+      console.log('Cache disabled. Skipping cachePortfolioSummary.');
       return;
     }
-    
+
     try {
-      console.log(`[PORTFOLIO CACHE] Caching portfolio: ${portfolioId}`);
-      const cacheKey = this.generatePortfolioKey(portfolioId);
-      const ttl = Math.floor(Date.now() / 1000) + this.CACHE_TTL;
+      await this.checkTableExists();
+      const key = this.generatePortfolioKey(portfolioId);
       
-      await this.dynamo.put({
+      // Ensure data has a timestamp if not provided
+      if (!data.timestamp) {
+        data.timestamp = new Date().toISOString();
+      }
+      
+      const params = {
         TableName: this.tableName,
         Item: {
-          key: cacheKey,
+          key,
           data,
-          ttl,
-          cacheType: 'portfolio',
-          portfolioId,
-          timestamp: new Date().toISOString()
-        },
-      }).promise();
+          ttl: Math.floor(Date.now() / 1000) + this.CACHE_TTL
+        }
+      };
       
-      console.log(`[PORTFOLIO CACHE] Successfully cached portfolio: ${portfolioId}`);
+      await this.dynamo.put(params).promise();
+      console.log(`Cached portfolio summary for portfolio: ${portfolioId}`);
     } catch (error) {
-      console.error(`[PORTFOLIO CACHE ERROR] Error caching portfolio ${portfolioId}:`, error);
-      // If we can't cache, disable the cache to avoid repeated failures
-      this.isEnabled = false;
+      console.error('Error caching portfolio summary:', error);
+      // No re-throw, cache errors shouldn't fail the operation
     }
   }
 

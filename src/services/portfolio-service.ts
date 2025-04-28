@@ -9,6 +9,15 @@ import { PortfolioCacheService } from './portfolio-cache-service';
 import { DynamoDB } from 'aws-sdk';
 
 /**
+ * Interface for standardized response with cache metadata
+ */
+interface PortfolioResponseWithCache {
+  data: PortfolioSummaryResponse;
+  fromCache: boolean;
+  timestamp: string;
+}
+
+/**
  * Service to handle portfolio-related operations
  */
 export class PortfolioService {
@@ -124,42 +133,46 @@ export class PortfolioService {
   /**
    * Gets a summary of all portfolios for a user
    */
-  async getUserPortfolioSummary(userId: string): Promise<any> {
+  async getUserPortfolioSummary(userId: string): Promise<PortfolioResponseWithCache> {
     try {
+      const timestamp = new Date().toISOString();
       // Check cache first
       const cachedData = await this.cacheService.getCachedUserPortfolioSummary(userId);
-      if (cachedData) {
+      
+      if (cachedData && cachedData.data) {
         console.log(`Using cached portfolio summary for user: ${userId}`);
         
-        // Add a flag to indicate this data came from cache
-        if (typeof cachedData === 'object') {
-          return {
-            ...cachedData,
-            isCached: true,
-            cacheTimestamp: new Date().toISOString()
-          };
-        }
-        
-        return cachedData;
+        // Return standardized response with cache metadata
+        return {
+          data: cachedData.data,
+          fromCache: true,
+          timestamp: cachedData.timestamp || timestamp
+        };
       }
 
       const portfolios = await this.portfolioRepository.findByUserId(userId);
       if (!portfolios || portfolios.length === 0) {
-        const emptyResponse = {
-          status: "success",
-          data: {
-            userId,
-            totalValue: 0,
-            currency: "USD",
-            lastUpdated: new Date().toISOString(),
-            stocks: []
-          },
-          isCached: false
+        const emptyData = {
+          userId,
+          totalValue: 0,
+          currency: "USD",
+          lastUpdated: timestamp,
+          stocks: []
+        };
+        
+        const response = {
+          data: emptyData,
+          fromCache: false,
+          timestamp
         };
         
         // Cache empty response
-        await this.cacheService.cacheUserPortfolioSummary(userId, emptyResponse);
-        return emptyResponse;
+        await this.cacheService.cacheUserPortfolioSummary(userId, {
+          data: emptyData,
+          timestamp
+        });
+        
+        return response;
       }
 
       // Por ahora solo manejamos el primer portfolio del usuario
@@ -167,13 +180,17 @@ export class PortfolioService {
       const summary = await this.getPortfolioSummary(portfolio.id);
 
       const response = {
-        status: "success",
-        data: summary,
-        isCached: false
+        data: summary.data,
+        fromCache: false,
+        timestamp
       };
       
       // Cache the response
-      await this.cacheService.cacheUserPortfolioSummary(userId, response);
+      await this.cacheService.cacheUserPortfolioSummary(userId, {
+        data: summary.data,
+        timestamp
+      });
+      
       return response;
     } catch (error) {
       console.error('Error getting portfolio summary:', error);
@@ -184,15 +201,18 @@ export class PortfolioService {
   /**
    * Obtiene un resumen completo del portfolio incluyendo el valor actual de las acciones
    */
-  async getPortfolioSummary(portfolioId: number): Promise<PortfolioSummaryResponse> {
+  async getPortfolioSummary(portfolioId: number): Promise<PortfolioResponseWithCache> {
     try {
+      const timestamp = new Date().toISOString();
       // Check cache first
       const cachedData = await this.cacheService.getCachedPortfolioSummary(portfolioId);
+      
       if (cachedData) {
         console.log(`Using cached portfolio summary for portfolio: ${portfolioId}`);
         return {
-          ...cachedData,
-          fromCache: true
+          data: cachedData.data,
+          fromCache: true,
+          timestamp: cachedData.timestamp || timestamp
         };
       }
 
@@ -222,7 +242,7 @@ export class PortfolioService {
           return {
             symbol: summary.symbol,
             name: stockDetails.name || summary.symbol,
-            quantity: summary.quantity,
+            quantity: Number(summary.quantity), // Ensure it's a number
             averagePrice: Number(averagePrice.toFixed(2)),
             currentPrice: Number(currentPrice.toFixed(2)),
             profitLoss: {
@@ -245,17 +265,25 @@ export class PortfolioService {
       // Actualizamos el valor total en la base de datos
       await this.portfolioRepository.updateValueAndTimestamp(portfolioId, totalValue);
 
-      const response = {
+      const portfolioData = {
         userId: portfolio.user_id,
         totalValue: Number(totalValue.toFixed(2)),
         currency: "USD",
-        lastUpdated: new Date().toISOString(),
-        stocks,
-        fromCache: false
+        lastUpdated: timestamp,
+        stocks
+      };
+
+      const response = {
+        data: portfolioData,
+        fromCache: false,
+        timestamp
       };
 
       // Cache the response
-      await this.cacheService.cachePortfolioSummary(portfolioId, response);
+      await this.cacheService.cachePortfolioSummary(portfolioId, {
+        data: portfolioData,
+        timestamp
+      });
       return response;
     } catch (error) {
       console.error('Error getting portfolio summary:', error);
@@ -268,6 +296,6 @@ export class PortfolioService {
    */
   async getPortfolioValue(portfolioId: number): Promise<number> {
     const summary = await this.getPortfolioSummary(portfolioId);
-    return summary.totalValue;
+    return summary.data.totalValue;
   }
 }
