@@ -16,52 +16,100 @@ export class TransactionRepository {
     }
     
     try {
-      // Primero intentamos con notes
-      const query = `
-        INSERT INTO transactions (portfolio_id, stock_symbol, type, quantity, price, status, date, notes) 
-        VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()), $8) 
-        RETURNING *
+      // Al principio intentamos verificar si la columna notes existe
+      const columnCheckQuery = `
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'transactions' AND column_name = 'notes'
       `;
       
-      const params = [
-        transaction.portfolio_id,
-        transaction.stock_symbol,
-        transaction.type,
-        transaction.quantity,
-        transaction.price,
-        transaction.status,
-        transaction.date,
-        transaction.notes || null
-      ];
+      const columnCheck = await this.dbService.query(columnCheckQuery);
+      const notesColumnExists = columnCheck.rows.length > 0;
       
-      const result = await this.dbService.query<ITransaction>(query, params);
-      return result.rows[0];
-    } catch (error) {
-      // Si falla por la columna 'notes', intentamos sin ella
-      console.log('Error al insertar transacción con notes, intentando sin notes:', error);
+      let query;
+      let params;
       
-      const fallbackQuery = `
-        INSERT INTO transactions (portfolio_id, stock_symbol, type, quantity, price, status, date) 
-        VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW())) 
-        RETURNING *
-      `;
-      
-      const fallbackParams = [
-        transaction.portfolio_id,
-        transaction.stock_symbol,
-        transaction.type,
-        transaction.quantity,
-        transaction.price,
-        transaction.status,
-        transaction.date
-      ];
-      
-      if (transaction.notes) {
-        console.log(`La razón del fallo no se almacenará en la BD: ${transaction.notes}`);
+      if (notesColumnExists) {
+        console.log('La columna notes existe en la tabla transactions, incluyéndola en la consulta');
+        query = `
+          INSERT INTO transactions (portfolio_id, stock_symbol, type, quantity, price, status, date, notes) 
+          VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()), $8) 
+          RETURNING *
+        `;
+        
+        params = [
+          transaction.portfolio_id,
+          transaction.stock_symbol,
+          transaction.type,
+          transaction.quantity,
+          transaction.price,
+          transaction.status,
+          transaction.date,
+          transaction.notes || null
+        ];
+      } else {
+        console.log('La columna notes NO existe en la tabla transactions, se omitirá');
+        query = `
+          INSERT INTO transactions (portfolio_id, stock_symbol, type, quantity, price, status, date) 
+          VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW())) 
+          RETURNING *
+        `;
+        
+        params = [
+          transaction.portfolio_id,
+          transaction.stock_symbol,
+          transaction.type,
+          transaction.quantity,
+          transaction.price,
+          transaction.status,
+          transaction.date
+        ];
+        
+        if (transaction.notes) {
+          console.log(`Razón del fallo (no almacenada en BD): ${transaction.notes}`);
+        }
       }
       
-      const fallbackResult = await this.dbService.query<ITransaction>(fallbackQuery, fallbackParams);
-      return fallbackResult.rows[0];
+      console.log(`Ejecutando consulta para insertar transacción: ${query}`);
+      const result = await this.dbService.query<ITransaction>(query, params);
+      console.log(`Transacción insertada correctamente con id: ${result.rows[0]?.id}`);
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error al insertar transacción:', error);
+      
+      // Si hay error con la columna notes, intentamos sin ella
+      if (error instanceof Error && error.message.includes('column "notes"')) {
+        console.log('Error con la columna notes, intentando insertar sin esta columna');
+        const fallbackQuery = `
+          INSERT INTO transactions (portfolio_id, stock_symbol, type, quantity, price, status, date) 
+          VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW())) 
+          RETURNING *
+        `;
+        
+        const fallbackParams = [
+          transaction.portfolio_id,
+          transaction.stock_symbol,
+          transaction.type,
+          transaction.quantity,
+          transaction.price,
+          transaction.status,
+          transaction.date
+        ];
+        
+        if (transaction.notes) {
+          console.log(`La razón del fallo no se almacenará en la BD: ${transaction.notes}`);
+        }
+        
+        try {
+          const fallbackResult = await this.dbService.query<ITransaction>(fallbackQuery, fallbackParams);
+          return fallbackResult.rows[0];
+        } catch (fallbackError) {
+          console.error('Error en el intento de fallback:', fallbackError);
+          throw fallbackError;
+        }
+      }
+      
+      throw error;
     }
   }
 }
