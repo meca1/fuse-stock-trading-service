@@ -21,18 +21,17 @@ const dailyReportHandler = async (event: APIGatewayProxyEvent): Promise<APIGatew
     // Initialize report service
     const reportService: IReportService = new ReportService(transactionRepository);
     
-    // Get date from event or use yesterday as default
+    // Get date from event or use today as default
     let dateStr;
     
     if (event.queryStringParameters && event.queryStringParameters.date) {
       dateStr = event.queryStringParameters.date;
       console.log(`Using provided date: ${dateStr}`);
     } else {
-      // Default to yesterday's date if not specified
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      dateStr = yesterday.toISOString().split('T')[0];
-      console.log(`Using default date (yesterday): ${dateStr}`);
+      // Default to today's date if not specified
+      const today = new Date();
+      dateStr = today.toISOString().split('T')[0];
+      console.log(`Using default date (today): ${dateStr}`);
     }
     
     console.log(`Generating report for date: ${dateStr}`);

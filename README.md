@@ -39,43 +39,43 @@ Before you begin, ensure you have the following installed:
    # Node environment
    NODE_ENV=development
 
-   # Database Configuration
+   # Database Configuration (PostgreSQL)
    DB_HOST=localhost
-   DB_PORT=5432
-   DB_NAME=fuse_stocks
-   DB_USER=postgres
+   DB_PORT=5433          # PostgreSQL puerto 5433 en Docker Compose
+   DB_NAME=stock_trading
+   DB_USERNAME=postgres
    DB_PASSWORD=postgres
-   DB_SSL=false
+   DATABASE_URL=postgres://postgres:postgres@localhost:5433/stock_trading?sslmode=disable
    
-   # Database URL for migrations (required for dbmate)
-   DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuse_stocks?sslmode=disable
-   
-   # DynamoDB Configuration
-   DYNAMODB_REGION=us-east-1
-   DYNAMODB_ACCESS_KEY_ID=local
-   DYNAMODB_SECRET_ACCESS_KEY=local
+   # DynamoDB Configuration (para caché de tokens)
    DYNAMODB_ENDPOINT=http://localhost:8000
-   DYNAMODB_TABLE=fuse-stock-tokens-dev
+   USE_DYNAMODB_CACHE=true
    
    # Vendor API Configuration
    VENDOR_API_URL=https://api.challenge.fusefinance.com
    VENDOR_API_KEY=nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e
    
    # Email Configuration
-   EMAIL_PROVIDER=smtp
-   EMAIL_SENDER=reports@example.com
+   # IMPORTANTE: Para desarrollo local usar 'smtp', para producción usar 'ses'
+   EMAIL_PROVIDER=smtp   # Obligatorio: 'smtp' para desarrollo, 'ses' para producción
+   EMAIL_SENDER=reports@localhost
    REPORT_RECIPIENTS=admin@example.com
    
-   # SMTP settings (for local development)
+   # SMTP settings (para desarrollo local con MailHog)
    SMTP_HOST=localhost
    SMTP_PORT=1025
    SMTP_AUTH=false
    SMTP_USER=
    SMTP_PASSWORD=
    
-   # AWS settings (for production)
+   # AWS settings (para producción)
    AWS_REGION=us-east-1
+   # En producción, configurar las credenciales de AWS para SES:
+   # AWS_ACCESS_KEY_ID=
+   # AWS_SECRET_ACCESS_KEY=
    ```
+
+   > **IMPORTANTE**: Para el envío de correos en entorno local, es crítico configurar `EMAIL_PROVIDER=smtp`. De lo contrario, el sistema intentará usar AWS SES y fallará con error de credenciales.
 
 ## Running the Service Locally
 
@@ -148,17 +148,45 @@ The service includes a feature to generate daily transaction reports and send th
 
 ### Running a Report Manually
 
-To generate and send a report for yesterday's transactions:
+Para generar un reporte para la fecha ACTUAL (por defecto):
 
 ```bash
-npm run report:daily
+curl -X POST "http://localhost:3000/dev/generate-report"
 ```
 
-To generate a one-time report and exit:
+Para generar un reporte para una fecha específica:
+
+```bash
+curl -X POST "http://localhost:3000/dev/generate-report?date=2025-04-28"
+```
+
+También puedes usar los scripts proporcionados:
 
 ```bash
 node scripts/local/quick-report.js
 ```
+
+### Fechas y Zonas Horarias
+
+El sistema utiliza UTC para todas las operaciones relacionadas con fechas:
+
+- Las transacciones se almacenan con timestamps UTC en la base de datos
+- Los reportes diarios buscan transacciones de 00:00:00 UTC a 23:59:59 UTC del día especificado
+- Por defecto, el endpoint `/generate-report` usa la fecha actual, no la de ayer
+
+### Configuración de Email para Reportes
+
+Para que el envío de reportes por email funcione correctamente:
+
+1. En entorno local:
+   - Asegúrate de que `EMAIL_PROVIDER=smtp` en tu archivo `.env`
+   - MailHog debe estar en ejecución (incluido en el docker-compose)
+   - Los reportes se pueden ver en `http://localhost:8025`
+
+2. En producción:
+   - Configura `EMAIL_PROVIDER=ses` 
+   - Proporciona credenciales AWS válidas con permisos para SES
+   - Verifica las direcciones de correo en AWS SES antes de enviar
 
 ### Viewing Generated Reports
 
@@ -242,55 +270,20 @@ serverless deploy --stage prod
 ### Local Database Connection Issues
 - Ensure Docker is running and containers are up
 - Check database credentials in `.env` file
-- Verify database port availability
+- Verify database port is 5433 (not 5432)
 
 ### Email Sending Issues
 - Check MailHog is running (`http://localhost:8025`)
-- Verify email configuration in `.env` file
+- Verify `EMAIL_PROVIDER=smtp` is set in `.env` file
+- El problema más común es que el sistema intenta usar AWS SES cuando debería usar SMTP local
 
-### API Response Errors
-- Check console logs for detailed error information
-- Verify vendor API key is correctly set
+### Problemas con Fechas en Reportes
+- Si el reporte muestra "0 transactions" aunque hay transacciones en esa fecha:
+  - Verifica que las transacciones estén dentro del rango de horas UTC de esa fecha
+  - Asegúrate de que el servidor y la BD estén usando la misma zona horaria (UTC)
+  - Usa el parámetro `?date=YYYY-MM-DD` para especificar exactamente la fecha que necesitas
 
-## Common Issues and Fixes
-
-### Authentication Error: Invalid API key
-If you see this error: `"status":"error","code":"AUTHENTICATION_ERROR","message":"Invalid API key"`:
-
-This means the API key being used to authenticate with the vendor API is invalid or has expired.
-
-**Fix**:
-1. Ensure you have the correct API key in your `.env` file:
-   ```
-   VENDOR_API_KEY=your_api_key_here
-   ```
-2. When making requests to your API, include the `x-api-key` header:
-   ```bash
-   curl -X GET "http://localhost:3000/dev/stocks" \
-     -H "x-api-key: your_api_key_here"
-   ```
-3. If the default API key has expired, you may need to contact the vendor for a new one or generate a new one if your system supports it.
-4. The default fallback key used in the codebase may no longer be valid.
-
-### Build Error: ReportData not exported
-If you encounter the following error during build (especially when building in Docker):
-```
-src/services/email-service.ts(3,10): error TS2459: Module '"./report-service"' declares 'ReportData' locally, but it is not exported.
-```
-
-This occurs because `email-service.ts` is trying to import the `ReportData` interface from the wrong module. 
-
-**Fix**: Ensure `email-service.ts` imports from `service-types.ts` instead of `report-service.ts`:
-```typescript
-// Incorrect
-import { ReportData } from './report-service';
-
-// Correct
-import { ReportData, EmailParams } from './service-types';
-```
-
-For a detailed technical explanation of the architecture and design decisions, please refer to [REPORT.md](REPORT.md).
-
-## License
-
-This project is proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited.
+### Resolución de Problemas Comunes
+- **Error "InvalidClientTokenId"**: Indica que está intentando usar AWS SES sin credenciales válidas. Solución: cambiar a `EMAIL_PROVIDER=smtp` en el archivo `.env`.
+- **Error "No transactions found"**: Verifica la fecha del reporte y asegúrate de que hay transacciones para esa fecha específica en UTC.
+- **Error de conexión a Base de Datos**: Asegúrate de usar el puerto 5433 para PostgreSQL, no el puerto 5432 por defecto.

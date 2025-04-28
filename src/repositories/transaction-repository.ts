@@ -131,11 +131,13 @@ export class TransactionRepository {
    */
   async findByDate(date: string): Promise<ITransaction[]> {
     try {
+      // Crear fecha de inicio (00:00:00 UTC)
       const startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
+      startDate.setUTCHours(0, 0, 0, 0);
       
+      // Crear fecha de fin (23:59:59 UTC)
       const endDate = new Date(date);
-      endDate.setHours(23, 59, 59, 999);
+      endDate.setUTCHours(23, 59, 59, 999);
       
       console.log(`Searching for transactions between ${startDate.toISOString()} and ${endDate.toISOString()}`);
       

@@ -21,6 +21,14 @@ custom:
       - VENDOR_API_URL
       - VENDOR_API_KEY
       - NODE_ENV
+      - EMAIL_PROVIDER
+      - EMAIL_SENDER
+      - REPORT_RECIPIENTS
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_AUTH
+      - SMTP_USER
+      - SMTP_PASSWORD
     logging: true
   # RDS database configuration
   rds:
@@ -126,7 +134,7 @@ functions:
           method: post
           cors: true
     environment:
-      EMAIL_PROVIDER: ${env:EMAIL_PROVIDER, 'ses'} # 'ses' para AWS, 'smtp' para local
+      EMAIL_PROVIDER: smtp # Forzar SMTP para desarrollo local
       EMAIL_SENDER: ${env:EMAIL_SENDER, 'reports@example.com'}
       REPORT_RECIPIENTS: ${env:REPORT_RECIPIENTS, 'admin@example.com'} # Lista separada por comas
       SMTP_HOST: ${env:SMTP_HOST, 'localhost'}
