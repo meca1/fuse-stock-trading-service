@@ -1,182 +1,220 @@
 # Fuse Stock Trading Service
 
-Backend service for stock trading operations. This service integrates with an external API to list available stocks, manage user portfolios, and execute stock purchase transactions.
+Backend service for stock trading operations with an external vendor API.
 
-## Features
+## Getting Started
 
-- List available stocks with pagination and search
-- Get user portfolios
-- Execute stock purchase transactions
-- Generate and send daily reports by email
-
-## Architecture
-
-The service is built with:
-
-- **Node.js & TypeScript**: Base language and static typing
-- **Serverless Framework**: Infrastructure as code for AWS Lambda
-- **DynamoDB**: NoSQL database for storage
-- **AWS Lambda**: Functions as a service for processing
+These instructions will help you set up and run the project on your local machine for development and testing purposes.
 
 ## Prerequisites
 
-Before starting, make sure you have installed:
+Before you begin, ensure you have the following installed:
 
-- Node.js (v14+)
-- npm or yarn
-- Docker and Docker Compose (for local development)
-- AWS CLI (for deployment)
-- Serverless Framework (`npm install -g serverless`)
+- Node.js (v18.9.0 or later)
+- npm (v8.19.1 or later)
+- Docker (v27.1.2 or later) and Docker Compose
+- AWS CLI (v2.22.12 or later)
+- Serverless Framework (v3.40.0 or later, `npm install -g serverless@3.x`)
 
 ## Installation
 
 1. Clone the repository:
-   ```
+   ```bash
    git clone <repository-url>
    cd fuse-stock-trading-service
    ```
 
 2. Install dependencies:
-   ```
+   ```bash
    npm install
    ```
 
-3. Copy the environment variables file:
-   ```
+3. Set up environment variables:
+   ```bash
    cp .env.example .env
    ```
 
-4. Modify the `.env` file with your values:
+4. Edit the `.env` file with your configuration values:
    ```
-   VENDOR_API_KEY=nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e
-   DYNAMODB_ENDPOINT=http://localhost:8000
-   DYNAMODB_REGION=us-east-1
-   DYNAMODB_ACCESS_KEY_ID=local
-   DYNAMODB_SECRET_ACCESS_KEY=local
-   DYNAMODB_TABLE=fuse-stock-tokens-local
-   STOCK_CACHE_TABLE=fuse-stock-cache-local
-   ```
-
-## Database Configuration
-
-1. Start local DynamoDB with Docker:
-   ```
-   docker-compose up -d
-   ```
-
-2. Create tables using migrations:
-   ```
-   npm run migrate:up
+   # Database Configuration
+   DB_USERNAME=postgres
+   DB_PASSWORD=postgres
+   DB_NAME=stock_trading
+   DB_HOST=localhost
+   DB_PORT=5432
+   
+   # Vendor API Configuration
+   VENDOR_API_URL=https://api.challenge.fusefinance.com
+   VENDOR_API_KEY=your_api_key_here
+   
+   # Email settings for reports
+   EMAIL_PROVIDER=smtp
+   EMAIL_SENDER=reports@example.com
+   REPORT_RECIPIENTS=admin@example.com
+   SMTP_HOST=localhost
+   SMTP_PORT=1025
    ```
 
-## Run Locally
+## Running the Service Locally
 
-1. Start the development server:
-   ```
-   npm run dev
-   ```
+### 1. Start Local Dependencies
 
-2. The service will be available at `http://localhost:3000`
+Run the following command to start PostgreSQL, DynamoDB local, and MailHog:
 
-### Test endpoints locally
-
-To list stocks:
-```
-curl -X GET "http://localhost:3000/stocks" \
-  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
+```bash
+docker-compose up -d
 ```
 
-To search for specific stocks:
-```
-curl -X GET "http://localhost:3000/stocks?search=AAPL" \
-  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
+This starts:
+- PostgreSQL on port 5432
+- DynamoDB Local on port 8000
+- MailHog (SMTP testing) on ports 1025 (SMTP) and 8025 (Web UI)
+
+### 2. Initialize Database
+
+Run database migrations:
+
+```bash
+npm run db:migrate
 ```
 
-To paginate results:
-```
-curl -X GET "http://localhost:3000/stocks?nextToken=TOKEN_HERE" \
-  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
+### 3. Initialize DynamoDB Tables
+
+Set up the required DynamoDB tables:
+
+```bash
+npm run dynamodb:init
 ```
 
-To buy stocks:
+### 4. Start the Development Server
+
+Start the local serverless development environment:
+
+```bash
+npm run dev
 ```
-curl -X POST "http://localhost:3000/stocks/AAPL/buy" \
-  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e" \
+
+The service will now be running at `http://localhost:3000`.
+
+## Testing the Endpoints
+
+Use curl, Postman, or any HTTP client to test the endpoints:
+
+### List Stocks
+```bash
+curl -X GET "http://localhost:3000/dev/stocks" \
+  -H "x-api-key: your_api_key_here"
+```
+
+### Get User Portfolios
+```bash
+curl -X GET "http://localhost:3000/dev/users/123/portfolios" \
+  -H "x-api-key: your_api_key_here"
+```
+
+### Buy Stock
+```bash
+curl -X POST "http://localhost:3000/dev/stocks/AAPL/buy" \
+  -H "x-api-key: your_api_key_here" \
   -H "Content-Type: application/json" \
-  -d '{"price": 150.50, "quantity": 10}'
+  -d '{"portfolioId": "1", "quantity": 10, "price": 150.50}'
 ```
 
-## Testing
+## Daily Reports
+
+The service includes a feature to generate daily transaction reports and send them by email.
+
+### Running a Report Manually
+
+To generate and send a report for yesterday's transactions:
+
+```bash
+npm run report:daily
+```
+
+To generate a one-time report and exit:
+
+```bash
+node scripts/local/quick-report.js
+```
+
+### Viewing Generated Reports
+
+When running locally, all emails are sent to MailHog. Open the following URL in your browser to view them:
+
+```
+http://localhost:8025
+```
+
+## Running Tests
 
 Run unit tests:
-```
+
+```bash
 npm test
 ```
 
 Run tests with coverage:
-```
+
+```bash
 npm run test:coverage
 ```
 
 ## Deployment
 
-1. Configure your AWS credentials:
-   ```
-   aws configure
-   ```
+### Configure AWS Credentials
 
-2. Deploy the service:
-   ```
-   npm run deploy
-   ```
-   
-   Or manually:
-   ```
-   serverless deploy --stage prod
-   ```
-
-## Project Structure
-
-```
-fuse-stock-trading-service/
-├── src/                      # Source code
-│   ├── config/               # Configuration
-│   ├── handlers/             # Lambda handlers
-│   │   ├── cron/             # Scheduled tasks
-│   │   ├── portfolios/       # Portfolio endpoints
-│   │   └── stocks/           # Stock endpoints
-│   ├── middleware/           # Lambda middleware
-│   ├── repositories/         # Data access layer
-│   ├── services/             # Business logic
-│   │   └── vendor/           # External API integration
-│   ├── types/                # Type definitions
-│   └── utils/                # Utilities
-├── db/
-│   └── migrations/           # Database migrations
-├── scripts/                  # Utility scripts
-├── serverless.yml           # Serverless configuration
-└── .env                     # Local environment variables
+```bash
+aws configure
 ```
 
-## Monitoring
+### Deploy to Development Environment
 
-- Logs are available in CloudWatch Logs
-- A caching system was implemented to improve performance
-- The service includes error handling for external API failure cases
+```bash
+npm run deploy:dev
+```
 
-## Development Environment
+### Deploy to Production Environment
 
-The project includes:
+```bash
+npm run deploy:prod
+```
 
-- ESLint and Prettier for code formatting
-- Husky for git hooks
-- Jest for testing
-- Docker Compose for local services
+Or manually:
+
+```bash
+serverless deploy --stage prod
+```
+
+## Available Scripts
+
+- `npm run dev`: Run the service locally
+- `npm run build`: Build the TypeScript code
+- `npm test`: Run unit tests
+- `npm run lint`: Run linting checks
+- `npm run db:init`: Initialize the database
+- `npm run db:migrate`: Run database migrations
+- `npm run dynamodb:init`: Initialize DynamoDB tables
+- `npm run report:daily`: Generate and send a daily report
+- `npm run report:daily:cron`: Run the report service with cron scheduler
+
+## Troubleshooting
+
+### Local Database Connection Issues
+- Ensure Docker is running and containers are up
+- Check database credentials in `.env` file
+- Verify database port availability
+
+### Email Sending Issues
+- Check MailHog is running (`http://localhost:8025`)
+- Verify email configuration in `.env` file
+
+### API Response Errors
+- Check console logs for detailed error information
+- Verify vendor API key is correctly set
+
+For a detailed technical explanation of the architecture and design decisions, please refer to [REPORT.md](REPORT.md).
 
 ## License
 
-This project is private.
-
----
-
-Developed for Fuse Finance as part of the technical evaluation process.
+This project is proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited.
