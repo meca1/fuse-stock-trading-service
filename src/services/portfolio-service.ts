@@ -10,22 +10,12 @@ import { UserRepository } from '../repositories/user-repository';
  * Service to handle portfolio-related operations
  */
 export class PortfolioService {
-  private portfolioRepository: PortfolioRepository;
-  private transactionRepository: TransactionRepository;
-  private stockService: StockService;
-  private userRepository: UserRepository;
-
   constructor(
-    portfolioRepository: PortfolioRepository,
-    transactionRepository: TransactionRepository,
-    userRepository: UserRepository,
-    stockService: StockService
-  ) {
-    this.portfolioRepository = portfolioRepository;
-    this.transactionRepository = transactionRepository;
-    this.userRepository = userRepository;
-    this.stockService = stockService;
-  }
+    private portfolioRepository: PortfolioRepository,
+    private transactionRepository: TransactionRepository,
+    private userRepository: UserRepository,
+    private stockService: StockService
+  ) {}
 
   /**
    * Gets all portfolios for a user
