@@ -55,4 +55,5 @@ config.local.json
 .dynamodb/
 
 # Project specific
+proyect.md
 
