@@ -31,7 +31,8 @@ custom:
     allocatedStorage: 20
     engineVersion: '13.7'
     port: ${self:provider.environment.DB_PORT}
-  stockTokensTable: stock_tokens-${self:provider.stage}
+  stockTokensTable: fuse-stock-tokens-${self:provider.stage}
+  stockCacheTable: fuse-stock-cache-${self:provider.stage}
   dynamodbEndpoint: ${env:DYNAMODB_ENDPOINT, 'http://localhost:8000'}
 
 provider:
@@ -107,6 +108,7 @@ functions:
           cors: true
     environment:
       DYNAMODB_TABLE: ${self:custom.stockTokensTable}
+      STOCK_CACHE_TABLE: ${self:custom.stockCacheTable}
       DYNAMODB_ENDPOINT: ${self:custom.dynamodbEndpoint}
 
 # AWS CloudFormation resources definition
