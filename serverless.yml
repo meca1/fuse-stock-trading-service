@@ -111,5 +111,29 @@ functions:
       STOCK_CACHE_TABLE: ${self:custom.stockCacheTable}
       DYNAMODB_ENDPOINT: ${self:custom.dynamodbEndpoint}
 
+  dailyReport:
+    handler: src/handlers/cron/daily-report.handler
+    timeout: 300 # 5 minutos
+    memorySize: 512 # Más memoria para procesar reportes grandes
+    events:
+      - schedule:
+          name: DailyTransactionReport
+          description: 'Trigger daily transaction report generation and email delivery'
+          rate: cron(59 23 * * ? *) # Se ejecuta todos los días a las 23:59 UTC
+          enabled: true
+      - http: # Endpoint adicional para pruebas locales
+          path: /generate-report
+          method: post
+          cors: true
+    environment:
+      EMAIL_PROVIDER: ${env:EMAIL_PROVIDER, 'ses'} # 'ses' para AWS, 'smtp' para local
+      EMAIL_SENDER: ${env:EMAIL_SENDER, 'reports@example.com'}
+      REPORT_RECIPIENTS: ${env:REPORT_RECIPIENTS, 'admin@example.com'} # Lista separada por comas
+      SMTP_HOST: ${env:SMTP_HOST, 'localhost'}
+      SMTP_PORT: ${env:SMTP_PORT, '1025'}
+      SMTP_AUTH: ${env:SMTP_AUTH, 'false'}
+      SMTP_USER: ${env:SMTP_USER, ''}
+      SMTP_PASSWORD: ${env:SMTP_PASSWORD, ''}
+
 # AWS CloudFormation resources definition
 resources: ${file(./resources/rds.yml)}

@@ -112,4 +112,31 @@ export class TransactionRepository {
       throw error;
     }
   }
+
+  /**
+   * Busca transacciones por fecha
+   * @param date Fecha en formato YYYY-MM-DD
+   * @returns Lista de transacciones
+   */
+  async findByDate(date: string): Promise<ITransaction[]> {
+    try {
+      const startDate = new Date(`${date}T00:00:00Z`);
+      const endDate = new Date(`${date}T23:59:59Z`);
+      
+      const query = `
+        SELECT * FROM transactions 
+        WHERE date BETWEEN $1 AND $2
+        ORDER BY date DESC
+      `;
+      
+      console.log(`Buscando transacciones entre ${startDate.toISOString()} y ${endDate.toISOString()}`);
+      const result = await this.dbService.query<ITransaction>(query, [startDate.toISOString(), endDate.toISOString()]);
+      
+      console.log(`Se encontraron ${result.rows.length} transacciones para la fecha ${date}`);
+      return result.rows;
+    } catch (error) {
+      console.error(`Error al buscar transacciones por fecha ${date}:`, error);
+      throw error;
+    }
+  }
 }
