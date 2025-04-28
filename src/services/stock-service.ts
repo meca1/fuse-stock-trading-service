@@ -104,7 +104,7 @@ export class StockService {
    */
   public async getStockBySymbol(symbol: string): Promise<VendorStock | null> {
     // Si ya hay una solicitud en curso para este símbolo, reutilizarla
-    if (this.requestsInProgress[symbol]) {
+    if (symbol in this.requestsInProgress) {
       console.log(`Request already in progress for ${symbol}, reusing promise`);
       return this.requestsInProgress[symbol];
     }
