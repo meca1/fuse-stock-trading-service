@@ -21,7 +21,7 @@ export const dynamoDB = new AWS.DynamoDB(dynamoConfig);
 export const documentClient = new AWS.DynamoDB.DocumentClient(dynamoConfig);
 
 // Nombre de la tabla de caché
-export const STOCK_CACHE_TABLE = process.env.STOCK_CACHE_TABLE || 'StockCache';
+export const STOCK_CACHE_TABLE = process.env.STOCK_CACHE_TABLE || 'fuse-stock-cache-local';
 
 // Función para inicializar la tabla de caché si no existe
 export const initializeStockCacheTable = async (): Promise<void> => {

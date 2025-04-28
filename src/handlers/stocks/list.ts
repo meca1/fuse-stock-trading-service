@@ -10,7 +10,7 @@ const dynamo = new AWS.DynamoDB.DocumentClient({
   region: process.env.AWS_REGION || 'us-east-1',
   endpoint: process.env.AWS_ENDPOINT || 'http://localhost:8000',
 });
-const STOCK_CACHE_TABLE = process.env.STOCK_CACHE_TABLE || 'StockCache';
+const STOCK_CACHE_TABLE = process.env.STOCK_CACHE_TABLE || 'fuse-stock-cache-local';
 const CACHE_TTL = 120; // segundos
 
 /**
@@ -48,7 +48,7 @@ const listStocksHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewa
   try {
     const cacheRes = await dynamo.get({
       TableName: STOCK_CACHE_TABLE,
-      Key: { symbol: cacheKey },
+      Key: { key: cacheKey },
     }).promise();
     if (cacheRes.Item && cacheRes.Item.data && cacheRes.Item.ttl > Math.floor(Date.now() / 1000)) {
       cachedData = cacheRes.Item.data;
@@ -84,7 +84,7 @@ const listStocksHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewa
     await dynamo.put({
       TableName: STOCK_CACHE_TABLE,
       Item: {
-        symbol: cacheKey,
+        key: cacheKey,
         data: { items, nextToken: newNextToken, totalItems, lastUpdated },
         ttl: Math.floor(Date.now() / 1000) + CACHE_TTL,
       },

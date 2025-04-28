@@ -24,7 +24,7 @@ export class DailyStockTokenService {
     }
     
     this.dynamoDb = new DynamoDB.DocumentClient(config);
-    this.tableName = process.env.DYNAMODB_TABLE || 'stock_tokens';
+    this.tableName = process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local';
   }
 
   public static getInstance(): DailyStockTokenService {
