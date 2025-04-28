@@ -10,6 +10,9 @@ import { wrapHandler } from '../../middleware/lambda-error-handler';
 import { AppError, ValidationError, NotFoundError, BusinessError } from '../../utils/errors/app-error';
 import { buyStockParamsSchema, buyStockBodySchema } from '../../types/schemas/handlers';
 import { handleZodError } from '../../middleware/zod-error-handler';
+import { DynamoDB } from 'aws-sdk';
+import { StockTokenRepository } from '../../repositories/stock-token-repository';
+import { VendorApiClient } from '../../services/vendor/api-client';
 
 /**
  * Handler to execute a stock purchase
@@ -41,7 +44,17 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
   const { price, quantity, userId } = bodyResult.data;
   
   // Get stock details and current price from StockService
-  const stockService = new StockService();
+  const dynamoDb = new DynamoDB.DocumentClient({
+    region: process.env.DYNAMODB_REGION || 'us-east-1',
+    credentials: {
+      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
+    },
+    endpoint: process.env.DYNAMODB_ENDPOINT
+  });
+  const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
+  const vendorApi = new VendorApiClient();
+  const stockService = new StockService(stockTokenRepo, vendorApi);
   const stockDetails = await stockService.getStockBySymbol(symbol);
   
   if (!stockDetails) {

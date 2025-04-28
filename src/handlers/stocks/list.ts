@@ -1,5 +1,8 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { StockService } from '../../services/stock-service';
+import { StockTokenRepository } from '../../repositories/stock-token-repository';
+import { VendorApiClient } from '../../services/vendor/api-client';
+import { DynamoDB } from 'aws-sdk';
 import AWS from 'aws-sdk';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
 import { AppError, AuthenticationError } from '../../utils/errors/app-error';
@@ -64,7 +67,17 @@ const listStocksHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewa
     ({ items, nextToken: newNextToken, totalItems, lastUpdated } = cachedData);
   } else {
     // 4. Consultar al proveedor externo
-    const stockService = new StockService();
+    const dynamoDb = new DynamoDB.DocumentClient({
+      region: process.env.DYNAMODB_REGION || 'us-east-1',
+      credentials: {
+        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
+      },
+      endpoint: process.env.DYNAMODB_ENDPOINT
+    });
+    const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
+    const vendorApi = new VendorApiClient();
+    const stockService = new StockService(stockTokenRepo, vendorApi);
     const result = await stockService.listAllStocks(nextToken, search);
     items = result.stocks.map(stock => ({
       symbol: stock.symbol,

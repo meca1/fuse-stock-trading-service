@@ -10,11 +10,11 @@ export class StockService {
   private stockTokenRepository: StockTokenRepository;
 
   constructor(
-    stockTokenRepository?: StockTokenRepository,
-    vendorApi?: VendorApiClient
+    stockTokenRepository: StockTokenRepository,
+    vendorApi: VendorApiClient
   ) {
-    this.vendorApi = vendorApi || VendorApiClient.getInstance();
-    this.stockTokenRepository = stockTokenRepository || new StockTokenRepository();
+    this.vendorApi = vendorApi;
+    this.stockTokenRepository = stockTokenRepository;
   }
 
   /**

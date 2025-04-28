@@ -2,24 +2,16 @@ import { VendorApiClient } from './vendor/api-client';
 import { StockTokenRepository } from '../repositories/stock-token-repository';
 
 export class DailyStockTokenService {
-  private static instance: DailyStockTokenService;
   private vendorApi: VendorApiClient;
   private stockTokenRepository: StockTokenRepository;
   private isRunning = false;
 
-  private constructor(
-    stockTokenRepository: StockTokenRepository = new StockTokenRepository(),
-    vendorApi: VendorApiClient = VendorApiClient.getInstance()
+  constructor(
+    stockTokenRepository: StockTokenRepository,
+    vendorApi: VendorApiClient
   ) {
     this.vendorApi = vendorApi;
     this.stockTokenRepository = stockTokenRepository;
-  }
-
-  public static getInstance(): DailyStockTokenService {
-    if (!DailyStockTokenService.instance) {
-      DailyStockTokenService.instance = new DailyStockTokenService();
-    }
-    return DailyStockTokenService.instance;
   }
 
   public async updateStockTokens(): Promise<void> {

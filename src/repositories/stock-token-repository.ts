@@ -1,20 +1,10 @@
 import { DynamoDB } from 'aws-sdk';
 
 export class StockTokenRepository {
-  private dynamoDb: DynamoDB.DocumentClient;
-  private tableName: string;
-
-  constructor(dynamoDb?: DynamoDB.DocumentClient, tableName?: string) {
-    this.dynamoDb = dynamoDb || new DynamoDB.DocumentClient({
-      region: process.env.DYNAMODB_REGION || 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
-      },
-      endpoint: process.env.DYNAMODB_ENDPOINT
-    });
-    this.tableName = tableName || process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local';
-  }
+  constructor(
+    private dynamoDb: DynamoDB.DocumentClient,
+    private tableName: string
+  ) {}
 
   /**
    * Gets a stock's pagination token from DynamoDB
