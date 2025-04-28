@@ -1,5 +1,5 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { TransactionType } from '../../types/common/enums';
+import { TransactionType, TransactionStatus } from '../../types/common/enums';
 import { PortfolioService } from '../../services/portfolio-service';
 import { PortfolioRepository } from '../../repositories/portfolio-repository';
 import { UserRepository } from '../../repositories/user-repository';
@@ -80,121 +80,181 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
   // Inicializar database service en paralelo con la validación
   const dbServicePromise = DatabaseService.getInstance();
   
-  // Esperar la validación de parámetros
-  const { symbol, price, quantity, userId, parsedBody } = await paramsPromise;
-  
-  // Obtener información del stock y DB service en paralelo
-  console.log('Fetching stock and database connection in parallel');
-  const [stockDetails, dbService] = await Promise.all([
-    stockService.getStockBySymbol(symbol),
-    dbServicePromise
-  ]);
-  
-  if (!stockDetails) {
-    throw new NotFoundError('Stock', symbol);
-  }
-
-  // Inicializar repositorios
-  const portfolioRepository = new PortfolioRepository(dbService);
-  const userRepository = new UserRepository(dbService);
-  const transactionRepository = new (require('../../repositories/transaction-repository').TransactionRepository)(dbService);
-  
-  // Procesamiento de precio
-  const numericCurrentPrice = Number(stockDetails.price);
-  if (isNaN(numericCurrentPrice)) {
-    throw new AppError('Invalid current price received from service', 500, 'INTERNAL_ERROR');
-  }
-  
-  // Validar precio (usando el método de validación del stock service)
-  if (!stockService.isValidPrice(numericCurrentPrice, price)) {
-    console.log('Price validation failed', {
-      requestedPrice: price,
-      currentPrice: numericCurrentPrice,
-      difference: Math.abs(price - numericCurrentPrice),
-      maximumAllowed: numericCurrentPrice * 0.02
-    });
-    throw new BusinessError(
-      `Price must be within 2% of current price ($${numericCurrentPrice.toFixed(2)})`
-    );
-  }
-  
-  // Obtener datos de usuario y portfolios en paralelo
-  const [user, portfolios] = await Promise.all([
-    userRepository.findById(userId),
-    portfolioRepository.findByUserId(userId)
-  ]);
-  
-  if (!user) {
-    throw new NotFoundError('User', userId);
-  }
-  
-  // Determinar el portfolio a utilizar y crear servicios mientras tanto
-  let portfolioPromise;
-  let createPortfolioPromise;
-  
-  if (!portfolios || portfolios.length === 0) {
-    // Iniciar la creación del portfolio sin await
-    createPortfolioPromise = portfolioRepository.create({
-      user_id: userId,
-      name: `${user.name}'s Portfolio`
-    } as Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>);
-  }
-
-  // Inicializar servicio de portfolio con cache
-  const portfolioCacheService = new PortfolioCacheService(
-    dynamoDb,
-    process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local'
-  );
-  
-  const portfolioService = new PortfolioService(
-    portfolioRepository,
-    transactionRepository,
-    userRepository,
-    stockService,
-    portfolioCacheService
-  );
-  
-  // Resolver el portfolio (esperar creación si fue necesario)
-  const portfolio = (!portfolios || portfolios.length === 0) 
-    ? await createPortfolioPromise!
-    : portfolios[0];
+  try {
+    // Esperar la validación de parámetros
+    const { symbol, price, quantity, userId, parsedBody } = await paramsPromise;
     
-  if (!portfolio) {
-    throw new Error('Failed to determine portfolio for user');
-  }
-  
-  // Ejecutar la compra
-  console.log(`Executing stock purchase for portfolio ${portfolio.id}, user ${userId}`);
-  const transaction = await portfolioService.executeStockPurchase(
-    portfolio.id,
-    symbol,
-    quantity,
-    price,
-    TransactionType.BUY
-  );
-  
-  // Medir tiempo de ejecución
-  const executionTime = Date.now() - startTime;
-  console.log(`Purchase executed in ${executionTime}ms`, {
-    transactionId: transaction.id,
-    portfolio: portfolio.id,
-    symbol,
-    quantity,
-    price
-  });
+    // Obtener información del stock y DB service en paralelo
+    console.log('Fetching stock and database connection in parallel');
+    const [stockDetails, dbService] = await Promise.all([
+      stockService.getStockBySymbol(symbol),
+      dbServicePromise
+    ]);
+    
+    // Inicializar repositorios
+    const portfolioRepository = new PortfolioRepository(dbService);
+    const userRepository = new UserRepository(dbService);
+    const transactionRepository = new (require('../../repositories/transaction-repository').TransactionRepository)(dbService);
+    
+    // Verificar si el stock se encontró
+    let errorReason = '';
+    if (!stockDetails) {
+      errorReason = `Stock with symbol ${symbol} not found`;
+      // Registrar transacción fallida
+      await registerFailedTransaction(
+        transactionRepository,
+        userId,
+        symbol,
+        quantity,
+        price,
+        errorReason
+      );
+      throw new NotFoundError('Stock', symbol);
+    }
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      status: 'success',
-      data: {
-        ...transaction,
-        currentPrice: numericCurrentPrice
-      },
-      message: 'Purchase executed successfully',
-      executionTime: `${executionTime}ms`
-    })
-  };
+    // Procesamiento de precio
+    const numericCurrentPrice = Number(stockDetails.price);
+    if (isNaN(numericCurrentPrice)) {
+      errorReason = 'Invalid current price received from service';
+      // Registrar transacción fallida
+      await registerFailedTransaction(
+        transactionRepository,
+        userId,
+        symbol,
+        quantity,
+        price,
+        errorReason
+      );
+      throw new AppError(errorReason, 500, 'INTERNAL_ERROR');
+    }
+    
+    // Validar precio (usando el método de validación del stock service)
+    if (!stockService.isValidPrice(numericCurrentPrice, price)) {
+      const priceInfo = {
+        requestedPrice: price,
+        currentPrice: numericCurrentPrice,
+        difference: Math.abs(price - numericCurrentPrice),
+        maximumAllowed: numericCurrentPrice * 0.02
+      };
+      
+      console.log('Price validation failed', priceInfo);
+      
+      errorReason = `Price must be within 2% of current price ($${numericCurrentPrice.toFixed(2)})`;
+      
+      // Registrar transacción fallida
+      await registerFailedTransaction(
+        transactionRepository,
+        userId,
+        symbol,
+        quantity,
+        price,
+        errorReason
+      );
+      
+      throw new BusinessError(errorReason);
+    }
+    
+    // Obtener datos de usuario y portfolios en paralelo
+    const [user, portfolios] = await Promise.all([
+      userRepository.findById(userId),
+      portfolioRepository.findByUserId(userId)
+    ]);
+    
+    if (!user) {
+      errorReason = `User with ID ${userId} not found`;
+      // Registrar transacción fallida
+      await registerFailedTransaction(
+        transactionRepository,
+        userId,
+        symbol,
+        quantity,
+        price,
+        errorReason
+      );
+      throw new NotFoundError('User', userId);
+    }
+    
+    // Determinar el portfolio a utilizar y crear servicios mientras tanto
+    let portfolioPromise;
+    let createPortfolioPromise;
+    
+    if (!portfolios || portfolios.length === 0) {
+      // Iniciar la creación del portfolio sin await
+      createPortfolioPromise = portfolioRepository.create({
+        user_id: userId,
+        name: `${user.name}'s Portfolio`
+      } as Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>);
+    }
+
+    // Inicializar servicio de portfolio con cache
+    const portfolioCacheService = new PortfolioCacheService(
+      dynamoDb,
+      process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local'
+    );
+    
+    const portfolioService = new PortfolioService(
+      portfolioRepository,
+      transactionRepository,
+      userRepository,
+      stockService,
+      portfolioCacheService
+    );
+    
+    // Resolver el portfolio (esperar creación si fue necesario)
+    const portfolio = (!portfolios || portfolios.length === 0) 
+      ? await createPortfolioPromise!
+      : portfolios[0];
+      
+    if (!portfolio) {
+      errorReason = 'Failed to determine portfolio for user';
+      // Registrar transacción fallida
+      await registerFailedTransaction(
+        transactionRepository,
+        userId,
+        symbol,
+        quantity,
+        price,
+        errorReason
+      );
+      throw new Error(errorReason);
+    }
+    
+    // Ejecutar la compra
+    console.log(`Executing stock purchase for portfolio ${portfolio.id}, user ${userId}`);
+    const transaction = await portfolioService.executeStockPurchase(
+      portfolio.id,
+      symbol,
+      quantity,
+      price,
+      TransactionType.BUY
+    );
+    
+    // Medir tiempo de ejecución
+    const executionTime = Date.now() - startTime;
+    console.log(`Purchase executed in ${executionTime}ms`, {
+      transactionId: transaction.id,
+      portfolio: portfolio.id,
+      symbol,
+      quantity,
+      price
+    });
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        status: 'success',
+        data: {
+          ...transaction,
+          currentPrice: numericCurrentPrice
+        },
+        message: 'Purchase executed successfully',
+        executionTime: `${executionTime}ms`
+      })
+    };
+  } catch (error) {
+    // Propagamos el error para que sea manejado por el wrapper
+    throw error;
+  }
 };
 
 /**
@@ -233,6 +293,64 @@ async function validateParams(event: APIGatewayProxyEvent): Promise<{
   const { price, quantity, userId } = bodyResult.data;
   
   return { symbol, price, quantity, userId, parsedBody };
+}
+
+/**
+ * Registra una transacción fallida en la base de datos
+ */
+async function registerFailedTransaction(
+  transactionRepository: any,
+  userId: string,
+  symbol: string,
+  quantity: number,
+  price: number,
+  reason: string
+): Promise<void> {
+  try {
+    // Obtenemos el portfolio del usuario o creamos uno temporal para registrar la transacción fallida
+    const dbService = await DatabaseService.getInstance();
+    const portfolioRepository = new PortfolioRepository(dbService);
+    
+    // Intentamos obtener el portfolio del usuario
+    const portfolios = await portfolioRepository.findByUserId(userId);
+    let portfolioId;
+    
+    if (portfolios && portfolios.length > 0) {
+      portfolioId = portfolios[0].id;
+    } else {
+      // Si no hay portfolio, creamos uno temporal o usamos un ID predeterminado para transacciones fallidas
+      const userRepository = new UserRepository(dbService);
+      const user = await userRepository.findById(userId);
+      
+      if (user) {
+        const portfolio = await portfolioRepository.create({
+          user_id: userId,
+          name: `${user.name}'s Portfolio`
+        } as Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>);
+        
+        portfolioId = portfolio.id;
+      } else {
+        // Si ni siquiera existe el usuario, usamos un ID genérico (esto debería ser raro)
+        portfolioId = 0; // O algún ID especial para transacciones sin portfolio válido
+      }
+    }
+    
+    // Registramos la transacción fallida
+    await transactionRepository.create({
+      portfolio_id: portfolioId,
+      stock_symbol: symbol,
+      type: TransactionType.BUY,
+      quantity,
+      price,
+      status: TransactionStatus.FAILED,
+      notes: reason // Añadir la razón del fallo
+    });
+    
+    console.log(`Failed transaction recorded for user ${userId}, symbol ${symbol}, reason: ${reason}`);
+  } catch (error) {
+    // Si hay un error al registrar la transacción fallida, solo lo logueamos sin interrumpir el flujo principal
+    console.error('Error recording failed transaction:', error);
+  }
 }
 
 export const handler = wrapHandler(buyStockHandler);

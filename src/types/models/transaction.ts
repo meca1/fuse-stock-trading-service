@@ -9,6 +9,7 @@ export interface ITransaction {
   price: number;
   status: TransactionStatus;
   date?: Date;
+  notes?: string;
   created_at?: Date;
   updated_at?: Date;
 } 
