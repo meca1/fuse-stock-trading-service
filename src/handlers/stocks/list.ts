@@ -2,6 +2,7 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { StockService } from '../../services/stock-service';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
+import { VendorApiRepository } from '../../repositories/vendor-api-repository';
 import { DynamoDB } from 'aws-sdk';
 import AWS from 'aws-sdk';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
@@ -76,7 +77,8 @@ const listStocksHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewa
       endpoint: process.env.DYNAMODB_ENDPOINT
     });
     const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
-    const vendorApi = new VendorApiClient();
+    const vendorApiRepository = new VendorApiRepository();
+    const vendorApi = new VendorApiClient(vendorApiRepository);
     const stockService = new StockService(stockTokenRepo, vendorApi);
     const result = await stockService.listAllStocks(nextToken, search);
     items = result.stocks.map(stock => ({

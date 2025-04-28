@@ -6,6 +6,7 @@ import { updateStockTokensEventSchema } from '../../types/schemas/handlers';
 import { DynamoDB } from 'aws-sdk';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
+import { VendorApiRepository } from '../../repositories/vendor-api-repository';
 
 const updateStockTokensHandler: Handler = async (event, context) => {
   console.log('Starting daily stock token update lambda', { event });
@@ -22,7 +23,8 @@ const updateStockTokensHandler: Handler = async (event, context) => {
     endpoint: process.env.DYNAMODB_ENDPOINT
   });
   const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
-  const vendorApi = new VendorApiClient();
+  const vendorApiRepository = new VendorApiRepository();
+  const vendorApi = new VendorApiClient(vendorApiRepository);
   const service = new DailyStockTokenService(stockTokenRepo, vendorApi);
   await service.updateStockTokens().catch((error: any) => {
     console.error('Error updating stock tokens:', error);

@@ -12,6 +12,7 @@ import { DatabaseService } from '../../config/database';
 import { DynamoDB } from 'aws-sdk';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
+import { VendorApiRepository } from '../../repositories/vendor-api-repository';
 
 /**
  * Handler to get the portfolio summary for a user
@@ -45,7 +46,8 @@ const listPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGa
     endpoint: process.env.DYNAMODB_ENDPOINT
   });
   const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
-  const vendorApi = new VendorApiClient();
+  const vendorApiRepository = new VendorApiRepository();
+  const vendorApi = new VendorApiClient(vendorApiRepository);
   const stockService = new StockService(stockTokenRepo, vendorApi);
   const portfolioService = new PortfolioService(
     portfolioRepository,

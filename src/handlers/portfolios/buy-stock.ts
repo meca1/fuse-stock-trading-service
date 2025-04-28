@@ -13,6 +13,7 @@ import { handleZodError } from '../../middleware/zod-error-handler';
 import { DynamoDB } from 'aws-sdk';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
+import { VendorApiRepository } from '../../repositories/vendor-api-repository';
 
 /**
  * Handler to execute a stock purchase
@@ -53,7 +54,8 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
     endpoint: process.env.DYNAMODB_ENDPOINT
   });
   const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
-  const vendorApi = new VendorApiClient();
+  const vendorApiRepository = new VendorApiRepository();
+  const vendorApi = new VendorApiClient(vendorApiRepository);
   const stockService = new StockService(stockTokenRepo, vendorApi);
   const stockDetails = await stockService.getStockBySymbol(symbol);
   

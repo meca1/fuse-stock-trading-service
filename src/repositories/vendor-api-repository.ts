@@ -1,8 +1,19 @@
-import { AxiosInstance } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import { ListStocksResponse, BuyStockParams, BuyStockResponse } from '../types/vendor/stock-api';
 
-export class VendorStockRepository {
-  constructor(private client: AxiosInstance) {}
+export class VendorApiRepository {
+  private client: AxiosInstance;
+
+  constructor() {
+    this.client = axios.create({
+      baseURL: process.env.VENDOR_API_URL || 'https://api.challenge.fusefinance.com',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.VENDOR_API_KEY || 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e',
+      },
+      timeout: 10000,
+    });
+  }
 
   async listStocks(nextToken?: string): Promise<ListStocksResponse> {
     const config: any = {};
@@ -24,4 +35,6 @@ export class VendorStockRepository {
     const response = await this.client.post(`/stocks/${symbol}/buy`, params);
     return response.data;
   }
+
+  // Aquí puedes agregar otros métodos como getStockPrice, etc.
 } 
