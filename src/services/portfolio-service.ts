@@ -126,11 +126,7 @@ export class PortfolioService {
             totalValue: 0,
             currency: "USD",
             lastUpdated: new Date().toISOString(),
-            stocks: [],
-            performance: {
-              lastMonth: 0,
-              lastYear: 0
-            }
+            stocks: []
           }
         };
       }
@@ -203,19 +199,12 @@ export class PortfolioService {
       // Actualizamos el valor total en la base de datos
       await this.portfolioRepository.updateValueAndTimestamp(portfolioId, totalValue);
 
-      // Calculamos el rendimiento (simulado por ahora)
-      const performance = {
-        lastMonth: Number((Math.random() * 10).toFixed(1)),
-        lastYear: Number((Math.random() * 25).toFixed(1))
-      };
-
       return {
         userId: portfolio.user_id,
         totalValue: Number(totalValue.toFixed(2)),
         currency: "USD",
         lastUpdated: new Date().toISOString(),
-        stocks,
-        performance
+        stocks
       };
     } catch (error) {
       console.error('Error getting portfolio summary:', error);

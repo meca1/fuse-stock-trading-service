@@ -51,8 +51,4 @@ export interface PortfolioSummaryResponse {
   currency: string;
   lastUpdated: string;
   stocks: PortfolioStock[];
-  performance: {
-    lastMonth: number;
-    lastYear: number;
-  };
 } 
