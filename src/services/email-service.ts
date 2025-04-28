@@ -41,10 +41,9 @@ export class EmailService {
         region: process.env.AWS_REGION || 'us-east-1',
         apiVersion: '2010-12-01'
       });
-      console.log('Cliente AWS SES inicializado correctamente');
+      console.log('AWS SES client initialized successfully');
     } catch (error) {
-      console.error('Error al inicializar cliente AWS SES:', error);
-      throw error;
+      console.error('Error initializing AWS SES client:', error);
     }
   }
   
@@ -63,10 +62,9 @@ export class EmailService {
         } : undefined
       });
       
-      console.log(`Cliente SMTP inicializado para ${process.env.SMTP_HOST || 'localhost'}:${process.env.SMTP_PORT || 1025}`);
+      console.log(`SMTP client initialized for ${process.env.SMTP_HOST || 'localhost'}:${process.env.SMTP_PORT || 1025}`);
     } catch (error) {
-      console.error('Error al inicializar cliente SMTP:', error);
-      throw error;
+      console.error('Error initializing SMTP client:', error);
     }
   }
   
@@ -88,12 +86,12 @@ export class EmailService {
         // Enviar con SMTP
         await this.sendWithSMTP(recipients, subject, htmlContent);
       } else {
-        throw new Error('No se ha inicializado ningún proveedor de email');
+        throw new Error('No email provider has been initialized');
       }
       
-      console.log(`Reporte enviado exitosamente a ${recipients.join(', ')}`);
+      console.log(`Report successfully sent to ${recipients.join(', ')}`);
     } catch (error) {
-      console.error('Error al enviar email:', error);
+      console.error('Error sending email:', error);
       throw error;
     }
   }

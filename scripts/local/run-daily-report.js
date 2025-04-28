@@ -1,4 +1,4 @@
-// Script para ejecutar el reporte diario usando node-cron
+// Script to run daily report using node-cron
 require('dotenv').config();
 
 // Asegurar que estamos en modo local
@@ -7,49 +7,53 @@ process.env.EMAIL_PROVIDER = 'smtp';
 
 const cron = require('node-cron');
 const path = require('path');
+const { handler } = require('../../dist/handlers/cron/daily-report');
 
-// Importamos los módulos necesarios
-async function runReport() {
+// Simplified event object for local execution
+const createEvent = (date = null) => {
+  return date ? { queryStringParameters: { date } } : {};
+};
+
+// Execute report generation
+async function runReport(date = null) {
   try {
-    console.log('Iniciando generación de reporte manual...');
+    console.log('Starting manual report generation...');
     
-    // Necesitamos importar el handler desde la versión compilada
-    const { handler } = require('../../dist/handlers/cron/daily-report');
-    
-    // Usar la fecha actual en lugar de ayer
+    // For today's report
     const today = new Date().toISOString().split('T')[0];
-    console.log(`Generando reporte para HOY: ${today}`);
+    console.log(`Generating report for TODAY: ${today}`);
     
-    // Pasar un evento con la fecha como parámetro
-    const result = await handler({
-      queryStringParameters: {
-        date: today
-      }
-    }, { 
-      getRemainingTimeInMillis: () => 30000 
-    });
+    // Call the lambda handler directly
+    const result = await handler(createEvent(date || today), {});
     
-    console.log('Resultado:', JSON.stringify(result, null, 2));
-    console.log('Reporte generado correctamente');
+    // Parse the response from the handler
+    const response = JSON.parse(result.body);
+    
+    console.log('Result:', JSON.stringify(response, null, 2));
+    console.log('Report generated successfully');
+    
+    return response;
   } catch (error) {
-    console.error('Error al ejecutar el reporte:', error);
+    console.error('Error executing report:', error);
+    throw error;
   }
 }
 
-// Si se ejecuta directamente, correr el reporte inmediatamente
+// If run directly, run the report immediately
 if (require.main === module) {
-  console.log('Ejecutando reporte inmediatamente...');
-  runReport();
+  if (process.argv.includes('--now')) {
+    console.log('Running report immediately...');
+    runReport().catch(console.error);
+  } else {
+    // Schedule the report to run at 23:59 every day
+    cron.schedule('59 23 * * *', () => {
+      console.log(`Running scheduled report at ${new Date().toISOString()}`);
+      runReport().catch(console.error);
+    });
+    
+    console.log('Report service started. The report will run at 23:59 every day.');
+    console.log('Press Ctrl+C to stop the service.');
+  }
 }
 
-// Configurar cron para ejecutar a las 23:59 todos los días
-cron.schedule('59 23 * * *', () => {
-  console.log(`Ejecutando reporte programado a las ${new Date().toISOString()}`);
-  runReport();
-});
-
-console.log('Servicio de reportes iniciado. El reporte se ejecutará a las 23:59 todos los días.');
-console.log('Presiona Ctrl+C para detener el servicio.');
-
-// Mantener el proceso vivo
-process.stdin.resume(); 
+module.exports = { runReport }; 

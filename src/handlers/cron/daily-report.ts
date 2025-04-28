@@ -1,78 +1,69 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DatabaseService } from '../../config/database';
-// Importamos solo los tipos
-import { IReportService, IEmailService } from '../../services/service-types';
-// Importamos las implementaciones con @ts-ignore
-// @ts-ignore
-import { ReportService } from '../../services/report-service';
-// @ts-ignore
-import { EmailService } from '../../services/email-service';
 import { TransactionRepository } from '../../repositories/transaction-repository';
+import { ReportService } from '../../services/report-service';
+import { EmailService } from '../../services/email-service';
+import { IReportService, IEmailService } from '../../services/service-types';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
 
 /**
- * Handler para generar y enviar reportes diarios de transacciones
+ * Handler to generate and send daily transaction reports
  */
 const dailyReportHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  console.log('Iniciando generación de reporte diario...');
   const startTime = Date.now();
+  console.log('Starting daily report generation...');
 
   try {
-    // Inicializar servicios
+    // Initialize services
     const dbService = await DatabaseService.getInstance();
     const transactionRepository = new TransactionRepository(dbService);
     
-    // Inicializar servicio de reportes
+    // Initialize report service
     const reportService: IReportService = new ReportService(transactionRepository);
     
-    // Obtener fecha del parámetro o usar ayer como valor predeterminado
+    // Get date from event or use yesterday as default
     let dateStr;
     
     if (event.queryStringParameters && event.queryStringParameters.date) {
       dateStr = event.queryStringParameters.date;
-      console.log(`Usando fecha proporcionada: ${dateStr}`);
+      console.log(`Using provided date: ${dateStr}`);
     } else {
-      // Por defecto, usamos ayer
+      // Default to yesterday's date if not specified
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       dateStr = yesterday.toISOString().split('T')[0];
-      console.log(`Usando fecha predeterminada (ayer): ${dateStr}`);
+      console.log(`Using default date (yesterday): ${dateStr}`);
     }
     
-    console.log(`Generando reporte para la fecha: ${dateStr}`);
+    console.log(`Generating report for date: ${dateStr}`);
     
-    // Generar reporte
+    // Generate report
     const report = await reportService.generateDailyReport(dateStr);
     
-    // Enviar por email
+    // Send by email
     const emailService: IEmailService = new EmailService();
     const recipients = process.env.REPORT_RECIPIENTS?.split(',') || ['admin@example.com'];
     
     await emailService.sendReportEmail({
       recipients,
-      subject: `Reporte Diario de Transacciones - ${dateStr}`,
+      subject: `Daily Transaction Report - ${dateStr}`,
       reportData: report
     });
     
     const executionTime = Date.now() - startTime;
-    console.log(`Reporte diario generado y enviado en ${executionTime}ms`);
+    console.log(`Daily report generated and sent in ${executionTime}ms`);
     
     return {
       statusCode: 200,
       body: JSON.stringify({
-        message: 'Reporte diario generado y enviado correctamente',
+        message: 'Daily report generated and sent successfully',
         date: dateStr,
         recipients,
-        executionTime: `${executionTime}ms`,
-        summary: {
-          totalTransactions: report.totalTransactions,
-          successfulTransactions: report.successfulTransactions.length,
-          failedTransactions: report.failedTransactions.length
-        }
+        executionTime
       })
     };
   } catch (error) {
-    console.error('Error al generar el reporte diario:', error);
+    console.error('Error generating daily report:', error);
     throw error;
   }
 };

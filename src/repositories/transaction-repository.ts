@@ -1,5 +1,6 @@
 import { DatabaseService } from '../config/database';
 import { ITransaction } from '../types/models/transaction';
+import { TransactionStatus } from '../types/common/enums';
 
 export class TransactionRepository {
   constructor(private readonly dbService: DatabaseService) {}
@@ -9,28 +10,33 @@ export class TransactionRepository {
    * @param transaction - Object with the new transaction data (without id, created_at, or updated_at).
    * @returns The created transaction with all its fields.
    */
-  async create(transaction: Omit<ITransaction, 'id' | 'created_at' | 'updated_at'>): Promise<ITransaction> {
-    // Asegurarse de que stock_symbol no sea null
-    if (!transaction.stock_symbol) {
-      transaction.stock_symbol = 'UNKNOWN';
-    }
+  async create(transaction: Partial<ITransaction>): Promise<ITransaction> {
+    let hasNotesColumn = true;
     
     try {
-      // Al principio intentamos verificar si la columna notes existe
-      const columnCheckQuery = `
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'transactions' AND column_name = 'notes'
-      `;
-      
-      const columnCheck = await this.dbService.query(columnCheckQuery);
-      const notesColumnExists = columnCheck.rows.length > 0;
-      
+      // Check if the 'notes' column exists in the 'transactions' table
+      try {
+        await this.dbService.query(`
+          SELECT column_name FROM information_schema.columns 
+          WHERE table_name = 'transactions' AND column_name = 'notes'
+        `);
+        console.log('Notes column exists in the transactions table, including it in the query');
+      } catch (error) {
+        hasNotesColumn = false;
+        console.log('Notes column does NOT exist in the transactions table, it will be omitted');
+      }
+
+      // If the status is FAILED and we have notes but the column doesn't exist
+      if (transaction.status === TransactionStatus.FAILED && transaction.notes && !hasNotesColumn) {
+        console.log(`Failure reason (not stored in DB): ${transaction.notes}`);
+      }
+
+      // Build the query dynamically based on whether the notes column exists
       let query;
       let params;
       
-      if (notesColumnExists) {
-        console.log('La columna notes existe en la tabla transactions, incluyéndola en la consulta');
+      if (hasNotesColumn) {
+        console.log('Notes column exists in the transactions table, including it in the query');
         query = `
           INSERT INTO transactions (portfolio_id, stock_symbol, type, quantity, price, status, date, notes) 
           VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()), $8) 
@@ -48,7 +54,7 @@ export class TransactionRepository {
           transaction.notes || null
         ];
       } else {
-        console.log('La columna notes NO existe en la tabla transactions, se omitirá');
+        console.log('Notes column does NOT exist in the transactions table, it will be omitted');
         query = `
           INSERT INTO transactions (portfolio_id, stock_symbol, type, quantity, price, status, date) 
           VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW())) 
@@ -66,47 +72,52 @@ export class TransactionRepository {
         ];
         
         if (transaction.notes) {
-          console.log(`Razón del fallo (no almacenada en BD): ${transaction.notes}`);
+          console.log(`Failure reason (not stored in DB): ${transaction.notes}`);
         }
       }
       
-      console.log(`Ejecutando consulta para insertar transacción: ${query}`);
-      const result = await this.dbService.query<ITransaction>(query, params);
-      console.log(`Transacción insertada correctamente con id: ${result.rows[0]?.id}`);
-      return result.rows[0];
-    } catch (error) {
-      console.error('Error al insertar transacción:', error);
+      console.log(`Executing query to insert transaction: ${query}`);
       
-      // Si hay error con la columna notes, intentamos sin ella
-      if (error instanceof Error && error.message.includes('column "notes"')) {
-        console.log('Error con la columna notes, intentando insertar sin esta columna');
-        const fallbackQuery = `
-          INSERT INTO transactions (portfolio_id, stock_symbol, type, quantity, price, status, date) 
-          VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW())) 
-          RETURNING *
-        `;
-        
-        const fallbackParams = [
-          transaction.portfolio_id,
-          transaction.stock_symbol,
-          transaction.type,
-          transaction.quantity,
-          transaction.price,
-          transaction.status,
-          transaction.date
-        ];
-        
-        if (transaction.notes) {
-          console.log(`La razón del fallo no se almacenará en la BD: ${transaction.notes}`);
-        }
+      const result = await this.dbService.query<ITransaction>(query, params);
+      console.log(`Transaction successfully inserted with id: ${result.rows[0]?.id}`);
+      
+      return result.rows[0];
+    } catch (error: any) {
+      console.error('Error inserting transaction:', error);
+      
+      // If the error is related to the 'notes' column, try inserting without it
+      if (hasNotesColumn && transaction.notes && error.toString().includes('notes')) {
+        console.log('Error with notes column, trying to insert without this column');
         
         try {
+          // Fallback query without notes
+          const fallbackQuery = `
+            INSERT INTO transactions (portfolio_id, stock_symbol, type, quantity, price, status, date) 
+            VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW())) 
+            RETURNING *
+          `;
+          
+          const fallbackParams = [
+            transaction.portfolio_id,
+            transaction.stock_symbol,
+            transaction.type,
+            transaction.quantity,
+            transaction.price,
+            transaction.status,
+            transaction.date
+          ];
+          
           const fallbackResult = await this.dbService.query<ITransaction>(fallbackQuery, fallbackParams);
           return fallbackResult.rows[0];
         } catch (fallbackError) {
-          console.error('Error en el intento de fallback:', fallbackError);
+          console.error('Error in fallback attempt:', fallbackError);
           throw fallbackError;
         }
+      }
+      
+      // If status is FAILED and we have notes but the column doesn't exist
+      if (transaction.status === TransactionStatus.FAILED && transaction.notes) {
+        console.log(`Failure reason will not be stored in DB: ${transaction.notes}`);
       }
       
       throw error;
@@ -120,22 +131,25 @@ export class TransactionRepository {
    */
   async findByDate(date: string): Promise<ITransaction[]> {
     try {
-      const startDate = new Date(`${date}T00:00:00Z`);
-      const endDate = new Date(`${date}T23:59:59Z`);
+      const startDate = new Date(date);
+      startDate.setHours(0, 0, 0, 0);
       
-      const query = `
+      const endDate = new Date(date);
+      endDate.setHours(23, 59, 59, 999);
+      
+      console.log(`Searching for transactions between ${startDate.toISOString()} and ${endDate.toISOString()}`);
+      
+      const result = await this.dbService.query<ITransaction>(`
         SELECT * FROM transactions 
         WHERE date BETWEEN $1 AND $2
         ORDER BY date DESC
-      `;
+      `, [startDate, endDate]);
       
-      console.log(`Buscando transacciones entre ${startDate.toISOString()} y ${endDate.toISOString()}`);
-      const result = await this.dbService.query<ITransaction>(query, [startDate.toISOString(), endDate.toISOString()]);
+      console.log(`Found ${result.rows.length} transactions for date ${date}`);
       
-      console.log(`Se encontraron ${result.rows.length} transacciones para la fecha ${date}`);
       return result.rows;
     } catch (error) {
-      console.error(`Error al buscar transacciones por fecha ${date}:`, error);
+      console.error(`Error searching for transactions by date ${date}:`, error);
       throw error;
     }
   }

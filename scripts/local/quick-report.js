@@ -1,23 +1,23 @@
-// Script para ejecutar el reporte diario sin mantener el proceso
+// Script to run daily report without keeping the process running
 require('dotenv').config();
 
 // Asegurar que estamos en modo local
 process.env.NODE_ENV = 'development';
 process.env.EMAIL_PROVIDER = 'smtp';
 
-// Importamos los módulos necesarios
+// Import the lambda handler from the compiled version
+const { handler } = require('../../dist/handlers/cron/daily-report');
+
+// Execute report generation
 async function runReport() {
   try {
-    console.log('Iniciando generación de reporte manual...');
+    console.log('Starting manual report generation...');
     
-    // Necesitamos importar el handler desde la versión compilada
-    const { handler } = require('../../dist/handlers/cron/daily-report');
-    
-    // Usar la fecha actual
+    // Use the current date instead of yesterday
     const today = new Date().toISOString().split('T')[0];
-    console.log(`Generando reporte para HOY: ${today}`);
+    console.log(`Generating report for TODAY: ${today}`);
     
-    // Pasar un evento con la fecha como parámetro
+    // Pass an event with the date as a parameter
     const result = await handler({
       queryStringParameters: {
         date: today
@@ -26,16 +26,16 @@ async function runReport() {
       getRemainingTimeInMillis: () => 30000 
     });
     
-    console.log('Resultado:', JSON.stringify(result, null, 2));
-    console.log('Reporte generado correctamente');
+    console.log('Result:', JSON.stringify(result, null, 2));
+    console.log('Report generated successfully');
     
-    // Terminar el proceso
+    // Exit the process after running the report
     process.exit(0);
   } catch (error) {
-    console.error('Error al ejecutar el reporte:', error);
+    console.error('Error executing report:', error);
     process.exit(1);
   }
 }
 
-// Ejecutar el reporte inmediatamente
+// Run the report immediately
 runReport(); 

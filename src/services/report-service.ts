@@ -1,47 +1,25 @@
 import { TransactionRepository } from '../repositories/transaction-repository';
 import { ITransaction } from '../types/models/transaction';
 import { TransactionStatus } from '../types/common/enums';
+import { IReportService, ReportData } from './service-types';
 
 /**
- * Interfaz para los datos del reporte
+ * Service for generating transaction reports
  */
-export interface ReportData {
-  date: string;
-  totalTransactions: number;
-  successfulTransactions: ITransaction[];
-  failedTransactions: ITransaction[];
-  summaryBySymbol: {
-    [symbol: string]: {
-      total: number;
-      successful: number;
-      failed: number;
-      totalAmount: number;
-    }
-  };
-  totals: {
-    successfulAmount: number;
-    failedAmount: number;
-    totalAmount: number;
-  };
-}
-
-/**
- * Servicio para la generación de reportes de transacciones
- */
-export class ReportService {
+export class ReportService implements IReportService {
   constructor(private readonly transactionRepository: TransactionRepository) {}
-  
+
   /**
-   * Genera un reporte diario de transacciones para una fecha específica
-   * @param date Fecha en formato YYYY-MM-DD
-   * @returns Datos del reporte
+   * Generates a daily transaction report for a specific date
+   * @param date Date in YYYY-MM-DD format
+   * @returns Report data
    */
   async generateDailyReport(date: string): Promise<ReportData> {
     try {
-      // Obtener todas las transacciones para la fecha especificada
+      // Get all transactions for the date
       const transactions = await this.transactionRepository.findByDate(date);
       
-      // Separar transacciones exitosas y fallidas
+      // Separate successful and failed transactions
       const successfulTransactions = transactions.filter(
         t => t.status === TransactionStatus.COMPLETED
       );
@@ -50,27 +28,27 @@ export class ReportService {
         t => t.status === TransactionStatus.FAILED
       );
       
-      // Generar resumen por símbolo
+      // Create summary by symbol
       const summaryBySymbol: ReportData['summaryBySymbol'] = {};
       
-      // Inicializar totales
+      // Initialize totals
       let successfulAmount = 0;
       let failedAmount = 0;
       
-      // Procesar cada transacción para el resumen
+      // Process each transaction for the summary
       transactions.forEach(transaction => {
         const symbol = transaction.stock_symbol;
         const amount = transaction.quantity * transaction.price;
         const isSuccessful = transaction.status === TransactionStatus.COMPLETED;
         
-        // Actualizar totales
+        // Update totals
         if (isSuccessful) {
           successfulAmount += amount;
         } else {
           failedAmount += amount;
         }
         
-        // Inicializar el resumen del símbolo si no existe
+        // Initialize the symbol summary if it doesn't exist
         if (!summaryBySymbol[symbol]) {
           summaryBySymbol[symbol] = {
             total: 0,
@@ -80,7 +58,7 @@ export class ReportService {
           };
         }
         
-        // Actualizar resumen del símbolo
+        // Update symbol summary
         const symbolSummary = summaryBySymbol[symbol];
         symbolSummary.total += 1;
         symbolSummary.totalAmount += amount;
@@ -92,7 +70,7 @@ export class ReportService {
         }
       });
       
-      // Generar resumen final
+      // Generate final report data
       return {
         date,
         totalTransactions: transactions.length,
@@ -106,20 +84,20 @@ export class ReportService {
         }
       };
     } catch (error) {
-      console.error(`Error generando reporte para ${date}:`, error);
+      console.error(`Error generating report for ${date}:`, error);
       throw error;
     }
   }
   
   /**
-   * Formatea los datos del reporte como HTML para enviarlos por email
-   * @param reportData Datos del reporte
-   * @returns HTML formateado
+   * Formats the report data as HTML for email sending
+   * @param reportData Report data
+   * @returns Formatted HTML
    */
   formatReportAsHtml(reportData: ReportData): string {
     const { date, totalTransactions, successfulTransactions, failedTransactions, summaryBySymbol, totals } = reportData;
     
-    // Generar filas para la tabla de resumen por símbolo
+    // Generate rows for the symbol summary table
     const symbolRows = Object.entries(summaryBySymbol)
       .map(([symbol, data]) => {
         const successRate = data.total > 0 ? Math.round((data.successful / data.total) * 100) : 0;
@@ -136,7 +114,7 @@ export class ReportService {
       })
       .join('');
     
-    // Tabla de transacciones fallidas
+    // Failed transactions table
     const failedRows = failedTransactions
       .map(t => {
         return `
@@ -146,13 +124,13 @@ export class ReportService {
             <td>${t.quantity}</td>
             <td>$${t.price}</td>
             <td>$${(t.quantity * t.price).toFixed(2)}</td>
-            <td>${t.notes || 'Sin detalles'}</td>
+            <td>${t.notes || 'No details'}</td>
           </tr>
         `;
       })
       .join('');
     
-    // Generar HTML completo
+    // Generate complete HTML
     return `
       <!DOCTYPE html>
       <html>
@@ -169,28 +147,28 @@ export class ReportService {
         </style>
       </head>
       <body>
-        <h1>Reporte Diario de Transacciones - ${date}</h1>
+        <h1>Daily Transaction Report - ${date}</h1>
         
         <div class="summary">
-          <h2>Resumen</h2>
-          <p>Total de transacciones: <strong>${totalTransactions}</strong></p>
-          <p>Transacciones exitosas: <strong class="success">${successfulTransactions.length}</strong></p>
-          <p>Transacciones fallidas: <strong class="failure">${failedTransactions.length}</strong></p>
-          <p>Monto total procesado: <strong>$${totals.totalAmount.toFixed(2)}</strong></p>
-          <p>Monto de transacciones exitosas: <strong class="success">$${totals.successfulAmount.toFixed(2)}</strong></p>
-          <p>Monto de transacciones fallidas: <strong class="failure">$${totals.failedAmount.toFixed(2)}</strong></p>
+          <h2>Summary</h2>
+          <p>Total transactions: <strong>${totalTransactions}</strong></p>
+          <p>Successful transactions: <strong class="success">${successfulTransactions.length}</strong></p>
+          <p>Failed transactions: <strong class="failure">${failedTransactions.length}</strong></p>
+          <p>Total processed amount: <strong>$${totals.totalAmount.toFixed(2)}</strong></p>
+          <p>Successful transactions amount: <strong class="success">$${totals.successfulAmount.toFixed(2)}</strong></p>
+          <p>Failed transactions amount: <strong class="failure">$${totals.failedAmount.toFixed(2)}</strong></p>
         </div>
         
-        <h2>Resumen por Símbolo</h2>
+        <h2>Symbol Summary</h2>
         <table>
           <thead>
             <tr>
-              <th>Símbolo</th>
+              <th>Symbol</th>
               <th>Total</th>
-              <th>Exitosas</th>
-              <th>Fallidas</th>
-              <th>Tasa de Éxito</th>
-              <th>Monto Total</th>
+              <th>Successful</th>
+              <th>Failed</th>
+              <th>Success Rate</th>
+              <th>Total Amount</th>
             </tr>
           </thead>
           <tbody>
@@ -198,17 +176,17 @@ export class ReportService {
           </tbody>
         </table>
         
-        <h2>Transacciones Fallidas</h2>
-        ${failedTransactions.length === 0 ? '<p>No hay transacciones fallidas para esta fecha.</p>' : `
+        <h2>Failed Transactions</h2>
+        ${failedTransactions.length === 0 ? '<p>No failed transactions for this date.</p>' : `
         <table>
           <thead>
             <tr>
               <th>ID</th>
-              <th>Símbolo</th>
-              <th>Cantidad</th>
-              <th>Precio</th>
+              <th>Symbol</th>
+              <th>Quantity</th>
+              <th>Price</th>
               <th>Total</th>
-              <th>Razón del Fallo</th>
+              <th>Failure Reason</th>
             </tr>
           </thead>
           <tbody>
@@ -218,7 +196,7 @@ export class ReportService {
         `}
         
         <p style="margin-top: 30px; font-size: 12px; color: #666;">
-          Este es un reporte generado automáticamente. No responda a este correo.
+          This is an automatically generated report. Please do not reply to this email.
         </p>
       </body>
       </html>

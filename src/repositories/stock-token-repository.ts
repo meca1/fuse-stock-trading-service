@@ -18,19 +18,19 @@ export class StockTokenRepository {
         Key: { symbol }
       };
       
-      console.log(`Buscando token para ${symbol} en tabla ${this.tableName}...`);
+      console.log(`Searching for token for ${symbol} in table ${this.tableName}...`);
       const result = await this.dynamoDb.get(params).promise();
       
       if (result.Item && 'nextToken' in result.Item) {
-        console.log(`Token encontrado para ${symbol}: ${result.Item.nextToken}`);
-        console.log(`Última actualización: ${result.Item.lastUpdated || 'desconocido'}`);
+        console.log(`Token found for ${symbol}: ${result.Item.nextToken}`);
+        console.log(`Last update: ${result.Item.lastUpdated || 'unknown'}`);
         return result.Item.nextToken;
       } else {
-        console.log(`No se encontró token para ${symbol} en DynamoDB`);
+        console.log(`Token not found for ${symbol} in DynamoDB`);
         return null;
       }
     } catch (error) {
-      console.error(`Error al obtener token para ${symbol} desde DynamoDB:`, error);
+      console.error(`Error retrieving token for ${symbol} from DynamoDB:`, error);
       return null;
     }
   }
@@ -52,11 +52,11 @@ export class StockTokenRepository {
         }
       };
       
-      console.log(`Guardando token para ${symbol} en tabla ${this.tableName}: ${nextToken}`);
+      console.log(`Saving token for ${symbol} in table ${this.tableName}: ${nextToken}`);
       await this.dynamoDb.put(params).promise();
-      console.log(`Token guardado exitosamente para ${symbol} a las ${timestamp}`);
+      console.log(`Token successfully saved for ${symbol} at ${timestamp}`);
     } catch (error) {
-      console.error(`Error al guardar token para ${symbol} en DynamoDB:`, error);
+      console.error(`Error saving token for ${symbol} in DynamoDB:`, error);
       throw error;
     }
   }

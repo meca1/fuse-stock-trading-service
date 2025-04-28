@@ -10,7 +10,7 @@ export class DailyStockTokenService {
     private stockTokenRepository: StockTokenRepository,
     private vendorApi: VendorApiClient
   ) {
-    // Inicializar cliente DynamoDB para verificaciones
+    // Initialize DynamoDB client for verifications
     this.dynamoDb = new DynamoDB({
       region: process.env.DYNAMODB_REGION || 'us-east-1',
       credentials: {
@@ -22,28 +22,28 @@ export class DailyStockTokenService {
   }
 
   /**
-   * Verifica si la tabla existe antes de realizar operaciones
-   * Método público que puede ser llamado desde otros servicios
+   * Checks if the table exists before performing operations
+   * Public method that can be called from other services
    */
   public async checkTableExists(tableName: string): Promise<boolean> {
     try {
-      console.log(`Verificando si la tabla ${tableName} existe...`);
+      console.log(`Checking if table ${tableName} exists...`);
       await this.dynamoDb.describeTable({ TableName: tableName }).promise();
-      console.log(`¡La tabla ${tableName} existe!`);
+      console.log(`¡Table ${tableName} exists!`);
       return true;
     } catch (error: any) {
       if (error.code === 'ResourceNotFoundException') {
-        console.warn(`La tabla ${tableName} no existe. Creando tabla...`);
+        console.warn(`Table ${tableName} does not exist. Creating table...`);
         await this.createTable(tableName);
         return true;
       }
-      console.error(`Error al verificar la tabla ${tableName}:`, error);
+      console.error(`Error checking table ${tableName}:`, error);
       return false;
     }
   }
 
   /**
-   * Crea la tabla si no existe
+   * Creates the table if it doesn't exist
    */
   private async createTable(tableName: string): Promise<void> {
     try {
@@ -80,25 +80,25 @@ export class DailyStockTokenService {
   }
 
   /**
-   * Actualiza los tokens de stock con manejo de errores robusto
+   * Updates stock tokens with robust error handling
    */
   public async updateStockTokens(): Promise<void> {
     if (this.isRunning) {
-      console.log('Actualización ya en progreso');
+      console.log('Update already in progress');
       return;
     }
 
     this.isRunning = true;
-    console.log('Iniciando actualización diaria de tokens de acciones');
+    console.log('Starting daily stock token update');
 
     try {
-      // Obtener nombre de tabla del repositorio
+      // Get repository table name
       const tableName = process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-dev';
       
-      // Verificar si la tabla existe
+      // Check if table exists
       const tableExists = await this.checkTableExists(tableName);
       if (!tableExists) {
-        throw new Error(`La tabla ${tableName} no existe y no se pudo crear`);
+        throw new Error(`Table ${tableName} does not exist and could not be created`);
       }
 
       let currentToken: string | undefined;
@@ -106,14 +106,14 @@ export class DailyStockTokenService {
       const failedSymbols: string[] = [];
 
       do {
-        console.log(`Obteniendo lote de acciones${currentToken ? ' con token' : ''}...`);
+        console.log(`Getting batch of stocks${currentToken ? ' with token' : ''}...`);
         const response = await this.vendorApi.listStocks(currentToken);
         const stocks = response.data.items;
         const nextToken = response.data.nextToken;
         
-        console.log(`Procesando lote de ${stocks.length} acciones...`);
+        console.log(`Processing batch of ${stocks.length} stocks...`);
 
-        // Procesar en lotes más grandes para cubrir más stocks
+        // Process in larger batches to cover more stocks
         const batchSize = 25;
         for (let i = 0; i < stocks.length; i += batchSize) {
           const batch = stocks.slice(i, i + batchSize);
@@ -122,13 +122,13 @@ export class DailyStockTokenService {
             batch.map(async (stock) => {
               if (!processedSymbols.has(stock.symbol)) {
                 try {
-                  // Guardamos el token de la página donde se encontró el stock
+                  // We save the token for the page where the stock was found
                   await this.stockTokenRepository.saveToken(stock.symbol, currentToken || '');
                   processedSymbols.add(stock.symbol);
                 } catch (error: any) {
-                  console.error(`Error al guardar token para ${stock.symbol}:`, error);
+                  console.error(`Error saving token for stock`, error);
                   failedSymbols.push(stock.symbol);
-                  // No propagar el error para que otros símbolos continúen procesándose
+                  // Don't propagate the error so other symbols continue processing
                 }
               }
             })
@@ -138,12 +138,12 @@ export class DailyStockTokenService {
         currentToken = nextToken;
       } while (currentToken);
 
-      console.log(`Se actualizaron correctamente los tokens para ${processedSymbols.size} acciones`);
+      console.log(`Successfully updated tokens for ${processedSymbols.size} stocks`);
       if (failedSymbols.length > 0) {
-        console.warn(`Falló la actualización de tokens para ${failedSymbols.length} acciones: ${failedSymbols.join(', ')}`);
+        console.warn(`Token update failed for ${failedSymbols.length} stocks: ${failedSymbols.join(', ')}`);
       }
     } catch (error: any) {
-      console.error('Error en la actualización de tokens de acciones:', error);
+      console.error('Error in stock token update:', error);
       throw error;
     } finally {
       this.isRunning = false;
