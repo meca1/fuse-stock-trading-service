@@ -1,5 +1,5 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import axiosRetry from 'axios-retry';
+import axios from 'axios';
+import { VendorStockRepository } from '../../repositories/vendor-stock-repository';
 import { ListStocksResponse, BuyStockParams, BuyStockResponse, VendorApiError, VendorStock } from '../../types/vendor/stock-api';
 
 // Cache configuration
@@ -18,60 +18,28 @@ interface StockCache {
  */
 export class VendorApiClient {
   private static instance: VendorApiClient;
-  private client!: AxiosInstance;
+  private vendorStockRepository!: VendorStockRepository;
   private baseUrl: string = process.env.VENDOR_API_URL || 'https://api.challenge.fusefinance.com';
   private apiKey: string = process.env.VENDOR_API_KEY || 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e';
   private stockCache: Map<string, StockCache> = new Map();
 
-  constructor() {
+  constructor(vendorStockRepository?: VendorStockRepository) {
     if (VendorApiClient.instance) {
       return VendorApiClient.instance;
     }
-
-    // Crear cliente HTTP
-    this.client = axios.create({
-      baseURL: this.baseUrl,
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.apiKey,
-      },
-      timeout: 10000, // 10 segundos de timeout
-    });
-
-    // Configurar reintentos para manejar errores temporales
-    axiosRetry(this.client, {
-      retries: 3,
-      retryDelay: (retryCount) => {
-        return retryCount * 1000;
-      },
-      retryCondition: (error) => {
-        return axiosRetry.isNetworkOrIdempotentRequestError(error) || 
-               (error.response && error.response.status >= 500) || false;
-      },
-    });
-
-    // Interceptor para loguear peticiones
-    this.client.interceptors.request.use((config) => {
-      console.log(`[VendorAPI] Request: ${config.method?.toUpperCase()} ${config.url}`);
-      return config;
-    });
-
-    // Interceptor para loguear respuestas y errores
-    this.client.interceptors.response.use(
-      (response) => {
-        console.log(`[VendorAPI] Response: ${response.status} ${response.config.url}`);
-        return response;
-      },
-      (error) => {
-        if (error.response) {
-          console.error(`[VendorAPI] Error: ${error.response.status} ${error.config.url}`, error.response.data);
-        } else {
-          console.error(`[VendorAPI] Error: ${error.message}`);
-        }
-        return Promise.reject(error);
-      }
-    );
-
+    if (vendorStockRepository) {
+      this.vendorStockRepository = vendorStockRepository;
+    } else {
+      const client = axios.create({
+        baseURL: this.baseUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,
+        },
+        timeout: 10000,
+      });
+      this.vendorStockRepository = new VendorStockRepository(client);
+    }
     VendorApiClient.instance = this;
   }
 
@@ -121,13 +89,7 @@ export class VendorApiClient {
    */
   async listStocks(nextToken?: string): Promise<ListStocksResponse> {
     try {
-      const config: AxiosRequestConfig = {};
-      if (nextToken) {
-        config.params = { nextToken };
-      }
-
-      const response: AxiosResponse<ListStocksResponse> = await this.client.get('/stocks', config);
-      return response.data;
+      return await this.vendorStockRepository.listStocks(nextToken);
     } catch (error) {
       console.error('[VendorAPI] Error al obtener la lista de stocks:', error);
       throw this.handleError(error);
@@ -139,32 +101,19 @@ export class VendorApiClient {
    */
   async getStockPrice(symbol: string): Promise<number> {
     try {
-      // Si el caché es válido, retornar precio cacheado
       if (this.isCacheValid(symbol)) {
         return this.stockCache.get(symbol)!.price;
       }
-
-      // Si debemos refrescar y tenemos nextToken, usarlo
       const cache = this.stockCache.get(symbol);
-      const params: any = { symbol };
-      if (this.shouldRefreshCache(symbol) && cache?.nextToken) {
-        params.nextToken = cache.nextToken;
-      }
-
-      const response = await this.listStocks(params.nextToken);
-      const stock = response.data.items.find(item => item.symbol === symbol);
-
-      if (!stock) {
-        throw new Error('Stock not found');
-      }
-
-      // Actualizar caché
+      const nextToken = this.shouldRefreshCache(symbol) && cache?.nextToken ? cache.nextToken : undefined;
+      const response = await this.vendorStockRepository.listStocks(nextToken);
+      const stock = response.data.items.find((item: any) => item.symbol === symbol);
+      if (!stock) throw new Error('Stock not found');
       this.stockCache.set(symbol, {
         price: stock.price,
         timestamp: Date.now(),
         nextToken: response.data.nextToken
       });
-
       return stock.price;
     } catch (error) {
       console.error('Error fetching stock price:', error);
@@ -180,17 +129,11 @@ export class VendorApiClient {
    */
   async buyStock(symbol: string, params: BuyStockParams): Promise<BuyStockResponse> {
     try {
-      // Verificar que el precio esté dentro del rango permitido
       const currentPrice = await this.getStockPrice(symbol);
       if (!this.isPriceWithinRange(currentPrice, params.price)) {
         throw new Error(`Price must be within 2% of current price ($${currentPrice})`);
       }
-
-      const response: AxiosResponse<BuyStockResponse> = await this.client.post(
-        `/stocks/${symbol}/buy`,
-        params
-      );
-      return response.data;
+      return await this.vendorStockRepository.buyStock(symbol, params);
     } catch (error) {
       console.error(`[VendorAPI] Error al comprar el stock ${symbol}:`, error);
       throw this.handleError(error);
@@ -220,10 +163,5 @@ export class VendorApiClient {
         message: error.message || 'Error en la petición',
       };
     }
-  }
-
-  async getStock(symbol: string, token?: string | null) {
-    const params = token ? { token } : {};
-    return this.client.get(`/stocks/${symbol}`, { params });
   }
 }
