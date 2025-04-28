@@ -10,10 +10,10 @@ These instructions will help you set up and run the project on your local machin
 
 Before you begin, ensure you have the following installed:
 
-- Node.js (v18.9.0 or later)
+- Node.js (v18.9.0)
 - npm (v8.19.1 or later)
 - Docker (v27.1.2 or later) and Docker Compose
-- AWS CLI (v2.22.12 or later)
+- AWS CLI (v2.22.12)
 - Serverless Framework (v3.40.0 or later, `npm install -g serverless@3.x`)
 
 ## Installation
@@ -59,7 +59,7 @@ Before you begin, ensure you have the following installed:
    
    # Vendor API Configuration
    VENDOR_API_URL=https://api.challenge.fusefinance.com
-   VENDOR_API_KEY=your_api_key_here
+   VENDOR_API_KEY=nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e
    
    # Email Configuration
    EMAIL_PROVIDER=smtp
@@ -253,6 +253,24 @@ serverless deploy --stage prod
 - Verify vendor API key is correctly set
 
 ## Common Issues and Fixes
+
+### Authentication Error: Invalid API key
+If you see this error: `"status":"error","code":"AUTHENTICATION_ERROR","message":"Invalid API key"`:
+
+This means the API key being used to authenticate with the vendor API is invalid or has expired.
+
+**Fix**:
+1. Ensure you have the correct API key in your `.env` file:
+   ```
+   VENDOR_API_KEY=your_api_key_here
+   ```
+2. When making requests to your API, include the `x-api-key` header:
+   ```bash
+   curl -X GET "http://localhost:3000/dev/stocks" \
+     -H "x-api-key: your_api_key_here"
+   ```
+3. If the default API key has expired, you may need to contact the vendor for a new one or generate a new one if your system supports it.
+4. The default fallback key used in the codebase may no longer be valid.
 
 ### Build Error: ReportData not exported
 If you encounter the following error during build (especially when building in Docker):
