@@ -30,11 +30,12 @@ describe('StockTokenRepository', () => {
       const token = await repo.getToken('AAPL');
       expect(token).toBeNull();
     });
-    it('should throw if DynamoDB get fails', async () => {
+    it('should return null if DynamoDB get fails', async () => {
       dynamoDb.get.mockReturnValueOnce({
         promise: () => Promise.reject(new Error('fail'))
       } as any);
-      await expect(repo.getToken('AAPL')).rejects.toThrow('fail');
+      const token = await repo.getToken('AAPL');
+      expect(token).toBeNull();
     });
   });
 

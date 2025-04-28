@@ -13,6 +13,9 @@ describe('DailyStockTokenService', () => {
       listStocks: jest.fn()
     };
     service = new DailyStockTokenService(repo, vendor);
+    
+    // Mock checkTableExists to always return true in tests
+    service.checkTableExists = jest.fn().mockResolvedValue(true);
   });
 
   it('should update tokens for all stocks', async () => {
