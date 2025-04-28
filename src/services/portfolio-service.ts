@@ -92,17 +92,27 @@ export class PortfolioService {
     type: TransactionType
   ): Promise<ITransaction> {
     try {
-      const stock = await this.stockService.getStockBySymbol(symbol);
+      // Primero verificamos que el stock existe y obtenemos su precio actual
+      // Esto se hace en paralelo con la obtención del portfolio
+      const [stock, portfolio] = await Promise.all([
+        this.stockService.getStockBySymbol(symbol),
+        this.portfolioRepository.findById(portfolioId)
+      ]);
+
       if (!stock) {
         throw new Error(`Stock with symbol ${symbol} not found`);
       }
 
-      const priceDiff = Math.abs(price - stock.price);
-      const maxDiff = stock.price * 0.02;
-      if (priceDiff > maxDiff) {
+      if (!portfolio) {
+        throw new Error(`Portfolio with ID ${portfolioId} not found`);
+      }
+
+      // Validar el precio
+      if (!this.stockService.isValidPrice(stock.price, price)) {
         throw new Error(`Price must be within 2% of current price ($${stock.price})`);
       }
 
+      // Crear la transacción
       const transaction = await this.transactionRepository.create({
         portfolio_id: portfolioId,
         stock_symbol: symbol,
@@ -112,21 +122,31 @@ export class PortfolioService {
         status: TransactionStatus.COMPLETED
       });
 
-      // Get the portfolio to find the userId
-      const portfolio = await this.portfolioRepository.findById(portfolioId);
-      if (portfolio) {
-        // Invalidate all caches related to this user after a transaction
-        await this.cacheService.invalidateAllUserRelatedCaches(
-          portfolio.user_id, 
-          [portfolioId]
-        );
-        console.log(`Cache invalidated for user ${portfolio.user_id} after transaction`);
-      }
+      // Iniciamos invalidación de caché en segundo plano, sin esperar su finalización
+      this.invalidatePortfolioCaches(portfolio.user_id, portfolioId);
 
       return transaction;
     } catch (error) {
       console.error('Error executing stock purchase:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Invalidar cachés relacionadas con el portfolio, de forma asíncrona
+   * Esta operación se ejecuta en segundo plano, sin bloquear la transacción principal
+   */
+  private async invalidatePortfolioCaches(userId: string, portfolioId: number): Promise<void> {
+    try {
+      console.log(`Invalidating caches for user ${userId} and portfolio ${portfolioId}`);
+      await this.cacheService.invalidateAllUserRelatedCaches(
+        userId, 
+        [portfolioId]
+      );
+      console.log(`Cache invalidated for user ${userId} after transaction`);
+    } catch (error) {
+      // Solo logeamos el error, no lo propagamos
+      console.error(`Error invalidating cache for user ${userId}:`, error);
     }
   }
 

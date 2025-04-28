@@ -16,23 +16,36 @@ import { PortfolioCacheService } from '../../services/portfolio-cache-service';
 // We need to manually define service factory to fix the module not found error
 const getStockServiceInstance = (): StockService => {
   const { DynamoDB } = require('aws-sdk');
-  const dynamoDb = new DynamoDB.DocumentClient({
+  
+  // Crear una sola instancia del cliente DynamoDB para toda la función
+  const dynamoConfig = {
     region: process.env.DYNAMODB_REGION || 'us-east-1',
     credentials: {
       accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
       secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
     },
     endpoint: process.env.DYNAMODB_ENDPOINT
-  });
+  };
+  
+  const dynamoDb = new DynamoDB.DocumentClient(dynamoConfig);
   
   // Import these inline to avoid circular dependencies
   const { StockTokenRepository } = require('../../repositories/stock-token-repository');
   const { VendorApiClient } = require('../../services/vendor/api-client');
   const { VendorApiRepository } = require('../../repositories/vendor-api-repository');
+  const { DailyStockTokenService } = require('../../services/daily-stock-token-service');
   
   const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
   const vendorApiRepository = new VendorApiRepository();
   const vendorApi = new VendorApiClient(vendorApiRepository);
+  
+  // Verificar tabla de tokens
+  const dailyStockService = new DailyStockTokenService(stockTokenRepo, vendorApi);
+  
+  // Intentar verificar la tabla de tokens en segundo plano (sin await)
+  dailyStockService.checkTableExists(process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local')
+    .catch((err: any) => console.warn('Error checking token table:', err));
+  
   return new StockService(stockTokenRepo, vendorApi);
 };
 
@@ -40,20 +53,195 @@ const getStockServiceInstance = (): StockService => {
  * Handler to execute a stock purchase
  */
 const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  // Marcamos el inicio para medir el rendimiento
+  const startTime = Date.now();
+  
   console.log('Buy stock handler started', { 
     pathParams: event.pathParameters,
     bodyExists: !!event.body
   });
 
-  // Log all environment variables related to DynamoDB for debugging
-  console.log('DynamoDB Configuration', {
-    region: process.env.DYNAMODB_REGION || 'N/A',
-    endpoint: process.env.DYNAMODB_ENDPOINT || 'N/A',
-    portfolioCacheTable: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
-    stocksTable: process.env.DYNAMODB_TABLE || 'N/A',
-    stockCacheTable: process.env.STOCK_CACHE_TABLE || 'N/A'
+  // Obtener y validar parámetros en paralelo con la inicialización de servicios
+  const paramsPromise = validateParams(event);
+  
+  // Inicializar los servicios mientras se validan los parámetros
+  const dynamoConfig = {
+    region: process.env.DYNAMODB_REGION || 'us-east-1',
+    credentials: {
+      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
+    },
+    endpoint: process.env.DYNAMODB_ENDPOINT
+  };
+  
+  const dynamoDb = new DynamoDB.DocumentClient(dynamoConfig);
+  const stockService = getStockServiceInstance();
+  
+  // Esperar la validación de parámetros
+  const { symbol, price, quantity, userId, parsedBody } = await paramsPromise;
+  
+  // Obtener información del stock, pero primero actualizaremos la tabla de tokens
+  // para asegurar que podemos encontrar todos los stocks disponibles
+  console.log('Ensuring stock token table is updated before searching for stock...');
+  
+  try {
+    const dailyStockService = new (require('../../services/daily-stock-token-service').DailyStockTokenService)(
+      stockService.getStockTokenRepository(),
+      stockService.getVendorApi()
+    );
+
+    // Verificar si la tabla existe y actualizarla si es necesario
+    await dailyStockService.checkTableExists(process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
+    
+    // Buscar y guardar información específica sobre el stock que se está comprando
+    // (No esperamos a que termine la actualización completa, que podría ser lenta)
+    const loadSpecificStock = async () => {
+      console.log(`Pre-loading token for specific stock: ${symbol}`);
+      const vendorApi = stockService.getVendorApi();
+      let currentToken: string | undefined = undefined;
+      let found = false;
+      
+      // Buscar en las primeras páginas para encontrar el stock específico
+      for (let i = 0; i < 3 && !found; i++) {
+        const response: any = await vendorApi.listStocks(currentToken);
+        const stock = response.data.items.find((item: any) => item.symbol === symbol);
+        
+        if (stock) {
+          console.log(`Found ${symbol} during pre-loading on page ${i+1}`);
+          await stockService.getStockTokenRepository().saveToken(symbol, currentToken || '');
+          found = true;
+        }
+        
+        currentToken = response.data.nextToken;
+        if (!currentToken) break;
+      }
+      
+      return found;
+    };
+    
+    // Ejecutar la pre-carga de tokens para este stock específico
+    const preloadResult = await loadSpecificStock();
+    console.log(`Pre-loading result for ${symbol}: ${preloadResult ? 'Found and cached' : 'Not found'}`);
+    
+  } catch (error) {
+    // Si hay un error en la pre-carga, lo registramos pero continuamos
+    console.warn('Error during stock token pre-loading:', error);
+  }
+  
+  // Obtener información del stock, usuario y portfolios en paralelo
+  console.log('Fetching stock, user and portfolios in parallel');
+  const [stockDetails, dbService] = await Promise.all([
+    stockService.getStockBySymbol(symbol),
+    DatabaseService.getInstance()
+  ]);
+  
+  if (!stockDetails) {
+    throw new NotFoundError('Stock', symbol);
+  }
+
+  // Procesamiento de precio
+  const numericCurrentPrice = Number(stockDetails.price);
+  if (isNaN(numericCurrentPrice)) {
+    throw new AppError('Invalid current price received from service', 500, 'INTERNAL_ERROR');
+  }
+  
+  // Validar precio (ahora usando el método de validación del stock service)
+  if (!stockService.isValidPrice(numericCurrentPrice, price)) {
+    console.log('Price validation failed', {
+      requestedPrice: price,
+      currentPrice: numericCurrentPrice,
+      difference: Math.abs(price - numericCurrentPrice),
+      maximumAllowed: numericCurrentPrice * 0.02
+    });
+    throw new BusinessError(
+      `Price must be within 2% of current price ($${numericCurrentPrice.toFixed(2)})`
+    );
+  }
+  
+  // Inicializar repositorios
+  const portfolioRepository = new PortfolioRepository(dbService);
+  const userRepository = new UserRepository(dbService);
+  const transactionRepository = new (require('../../repositories/transaction-repository').TransactionRepository)(dbService);
+  
+  // Obtener datos de usuario y portfolios en paralelo
+  const [user, portfolios] = await Promise.all([
+    userRepository.findById(userId),
+    portfolioRepository.findByUserId(userId)
+  ]);
+  
+  if (!user) {
+    throw new NotFoundError('User', userId);
+  }
+  
+  // Determinar el portfolio a utilizar
+  let portfolio: IPortfolio;
+  if (!portfolios || portfolios.length === 0) {
+    portfolio = await portfolioRepository.create({
+      user_id: userId,
+      name: `${user.name}'s Portfolio`
+    } as Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>);
+  } else {
+    portfolio = portfolios[0];
+  }
+
+  // Inicializar servicio de portfolio con cache
+  const portfolioCacheService = new PortfolioCacheService(
+    dynamoDb,
+    process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local'
+  );
+  
+  const portfolioService = new PortfolioService(
+    portfolioRepository,
+    transactionRepository,
+    userRepository,
+    stockService,
+    portfolioCacheService
+  );
+  
+  // Ejecutar la compra
+  console.log(`Executing stock purchase for portfolio ${portfolio.id}, user ${userId}`);
+  const transaction = await portfolioService.executeStockPurchase(
+    portfolio.id,
+    symbol,
+    quantity,
+    price,
+    TransactionType.BUY
+  );
+  
+  // Medir tiempo de ejecución
+  const executionTime = Date.now() - startTime;
+  console.log(`Purchase executed in ${executionTime}ms`, {
+    transactionId: transaction.id,
+    portfolio: portfolio.id,
+    symbol,
+    quantity,
+    price
   });
 
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      status: 'success',
+      data: {
+        ...transaction,
+        currentPrice: numericCurrentPrice
+      },
+      message: 'Purchase executed successfully',
+      executionTime: `${executionTime}ms`
+    })
+  };
+};
+
+/**
+ * Valida y extrae los parámetros de la petición
+ */
+async function validateParams(event: APIGatewayProxyEvent): Promise<{
+  symbol: string;
+  price: number;
+  quantity: number;
+  userId: string;
+  parsedBody: any;
+}> {
   // Validate path parameters
   const paramsResult = buyStockParamsSchema.safeParse(event.pathParameters || {});
   if (!paramsResult.success) {
@@ -79,133 +267,7 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
   }
   const { price, quantity, userId } = bodyResult.data;
   
-  // Get stock details and current price from StockService using our cached service
-  const stockService = getStockServiceInstance();
-  console.log(`[STOCK REQUEST] Getting stock details for symbol: ${symbol}`);
-  const stockDetails = await stockService.getStockBySymbol(symbol);
-  
-  if (!stockDetails) {
-    throw new NotFoundError('Stock', symbol);
-  }
-
-  console.log('Stock details retrieved', { 
-    symbol, 
-    stockPrice: stockDetails.price,
-    requestedPrice: price
-  });
-
-  // Ensure currentPrice is a number
-  const numericCurrentPrice = Number(stockDetails.price);
-  if (isNaN(numericCurrentPrice)) {
-    throw new AppError('Invalid current price received from service', 500, 'INTERNAL_ERROR');
-  }
-  
-  // Validate price is within 2% of current price
-  const priceDiff = Math.abs(price - numericCurrentPrice);
-  const maxDiff = numericCurrentPrice * 0.02;
-  
-  if (priceDiff > maxDiff) {
-    console.log('Price validation failed', {
-      requestedPrice: price,
-      currentPrice: numericCurrentPrice,
-      difference: priceDiff,
-      maximumAllowed: maxDiff
-    });
-    throw new BusinessError(
-      `Price must be within 2% of current price ($${numericCurrentPrice.toFixed(2)})`
-    );
-  }
-  
-  // Get or create portfolio for user
-  const dbService = await DatabaseService.getInstance();
-  const portfolioRepository = new PortfolioRepository(dbService);
-  const userRepository = new UserRepository(dbService);
-  
-  const user = await userRepository.findById(userId);
-  
-  if (!user) {
-    throw new NotFoundError('User', userId);
-  }
-  
-  const portfolios = await portfolioRepository.findByUserId(userId);
-  
-  let portfolio: IPortfolio;
-
-  if (!portfolios || portfolios.length === 0) {
-    portfolio = await portfolioRepository.create({
-      user_id: userId,
-      name: `${user.name}'s Portfolio`
-    } as Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>);
-  } else {
-    portfolio = portfolios[0];
-  }
-
-  // Create cache service for portfolio
-  const dynamoDb = new DynamoDB.DocumentClient({
-    region: process.env.DYNAMODB_REGION || 'us-east-1',
-    credentials: {
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
-    },
-    endpoint: process.env.DYNAMODB_ENDPOINT
-  });
-  
-  const portfolioCacheService = new PortfolioCacheService(
-    dynamoDb,
-    process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local'
-  );
-  
-  // Check if the cache table exists
-  try {
-    const tableExists = await portfolioCacheService.checkTableExists();
-    console.log(`Portfolio cache table check result: ${tableExists ? 'Table exists' : 'Table does not exist'}`);
-  } catch (error) {
-    console.error('Error checking if portfolio cache table exists:', error);
-    // We'll continue anyway, the cache service will disable itself if needed
-  }
-
-  // Execute purchase with enhanced portfolio service that supports caching
-  const portfolioService = new PortfolioService(
-    portfolioRepository,
-    new (require('../../repositories/transaction-repository').TransactionRepository)(dbService),
-    userRepository,
-    stockService,  // Using our cached stockService instance
-    portfolioCacheService  // Providing the cache service
-  );
-  
-  console.log(`Executing stock purchase for portfolio ${portfolio.id}, user ${userId}`);
-  const transaction = await portfolioService.executeStockPurchase(
-    portfolio.id,
-    symbol,
-    quantity,
-    price,
-    TransactionType.BUY
-  );
-    
-  console.log('Purchase executed successfully', {
-    transactionId: transaction.id,
-    portfolio: portfolio.id,
-    symbol,
-    quantity,
-    price
-  });
-
-  // After purchase, immediately invalidate the cache
-  await portfolioCacheService.invalidateAllUserRelatedCaches(userId, [portfolio.id]);
-  console.log(`Manually triggered cache invalidation for user ${userId} and portfolio ${portfolio.id}`);
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      status: 'success',
-      data: {
-        ...transaction,
-        currentPrice: numericCurrentPrice
-      },
-      message: 'Purchase executed successfully',
-      cacheInvalidated: true
-    })
-  };
-};
+  return { symbol, price, quantity, userId, parsedBody };
+}
 
 export const handler = wrapHandler(buyStockHandler);

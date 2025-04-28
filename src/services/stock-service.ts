@@ -2,14 +2,39 @@ import { VendorApiClient } from './vendor/api-client';
 import { VendorStock, ListStocksResponse, EnhancedVendorStock } from '../types/models/stock';
 import { StockTokenRepository } from '../repositories/stock-token-repository';
 
+// Cache para almacenar resultados de stocks
+interface StockCache {
+  [symbol: string]: {
+    data: VendorStock;
+    timestamp: number;
+  }
+}
+
 /**
  * Service to handle stock-related operations and token management
  */
 export class StockService {
+  private stockCache: StockCache = {};
+  private CACHE_TTL = 60 * 1000; // 1 minuto en milisegundos
+
   constructor(
     private stockTokenRepository: StockTokenRepository,
     private vendorApi: VendorApiClient
   ) {}
+
+  /**
+   * Obtiene el repositorio de tokens para uso externo
+   */
+  public getStockTokenRepository(): StockTokenRepository {
+    return this.stockTokenRepository;
+  }
+
+  /**
+   * Obtiene el cliente de API del vendor para uso externo
+   */
+  public getVendorApi(): VendorApiClient {
+    return this.vendorApi;
+  }
 
   /**
    * Gets a stock's pagination token from the repository
@@ -62,12 +87,30 @@ export class StockService {
   }
 
   /**
-   * Gets a specific stock by its symbol
+   * Verifica si el precio está dentro del 2% del precio actual
+   */
+  public isValidPrice(currentPrice: number, requestedPrice: number): boolean {
+    const priceDiff = Math.abs(requestedPrice - currentPrice);
+    const maxDiff = currentPrice * 0.02;
+    return priceDiff <= maxDiff;
+  }
+
+  /**
+   * Gets a specific stock by its symbol, using cache when possible
    * @param symbol Stock symbol
    * @returns Stock or null if it doesn't exist
    */
   public async getStockBySymbol(symbol: string): Promise<VendorStock | null> {
     try {
+      // Verificar caché primero
+      const now = Date.now();
+      const cachedStock = this.stockCache[symbol];
+      
+      if (cachedStock && (now - cachedStock.timestamp) < this.CACHE_TTL) {
+        console.log(`Using cached data for ${symbol}, age: ${now - cachedStock.timestamp}ms`);
+        return cachedStock.data;
+      }
+      
       // Primero intentamos con el token específico del stock
       const token = await this.getStockToken(symbol);
       console.log(`Token found for ${symbol}:`, token);
@@ -80,49 +123,69 @@ export class StockService {
         
         const stock = response.data.items.find(item => item.symbol === symbol);
         if (stock) {
-          return {
+          const vendorStock = {
             symbol: stock.symbol,
             name: stock.name,
             price: stock.price,
             exchange: stock.exchange || 'NYSE'
           };
+          
+          // Guardar en caché
+          this.stockCache[symbol] = {
+            data: vendorStock,
+            timestamp: now
+          };
+          
+          return vendorStock;
         }
       }
 
       // Si no hay token o no encontramos el stock en la página del token,
-      // buscamos en la primera página
-      console.log(`Searching ${symbol} in first page`);
-      const response = await this.vendorApi.listStocks();
-      const stock = response.data.items.find(item => item.symbol === symbol);
+      // buscamos en varias páginas, no solo en la primera
+      console.log(`Searching ${symbol} in multiple pages...`);
       
-      if (!stock) {
-        console.warn(`Stock not found: ${symbol}`);
-        return null;
-      }
-
-      return {
-        symbol: stock.symbol,
-        name: stock.name,
-        price: stock.price,
-        exchange: stock.exchange || 'NYSE'
-      };
+      let currentToken: string | undefined = undefined;
+      let pageCount = 0;
+      const MAX_PAGES = 5; // Limitamos la búsqueda a 5 páginas para evitar problemas de rendimiento
+      
+      do {
+        console.log(`Searching ${symbol} in page ${pageCount + 1} with token: ${currentToken || 'null'}`);
+        const response = await this.vendorApi.listStocks(currentToken);
+        const stock = response.data.items.find(item => item.symbol === symbol);
+        
+        if (stock) {
+          console.log(`Found ${symbol} in page ${pageCount + 1}`);
+          const vendorStock = {
+            symbol: stock.symbol,
+            name: stock.name,
+            price: stock.price,
+            exchange: stock.exchange || 'NYSE'
+          };
+          
+          // Guardar token para optimizar búsquedas futuras
+          await this.stockTokenRepository.saveToken(symbol, currentToken || '');
+          console.log(`Saved token for ${symbol}: ${currentToken || 'null'}`);
+          
+          // Guardar en caché
+          this.stockCache[symbol] = {
+            data: vendorStock,
+            timestamp: now
+          };
+          
+          return vendorStock;
+        }
+        
+        currentToken = response.data.nextToken;
+        pageCount++;
+        
+      } while (currentToken && pageCount < MAX_PAGES);
+      
+      console.warn(`Stock not found: ${symbol} after searching ${pageCount} pages`);
+      return null;
     } catch (error) {
       console.error(`Error getting stock ${symbol}:`, error);
       throw error;
     }
-  }
-
-  /**
-   * Verifies if a price is within the acceptable range (±2%)
-   * @param currentPrice Current stock price
-   * @param offeredPrice Offered price for purchase
-   * @returns true if the price is valid, false otherwise
-   */
-  isValidPrice(currentPrice: number, offeredPrice: number): boolean {
-    const lowerLimit = currentPrice * 0.98; // -2%
-    const upperLimit = currentPrice * 1.02; // +2%
-    
-    return offeredPrice >= lowerLimit && offeredPrice <= upperLimit;
   }
 
   /**

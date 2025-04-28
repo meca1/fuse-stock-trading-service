@@ -23,8 +23,9 @@ export class DailyStockTokenService {
 
   /**
    * Verifica si la tabla existe antes de realizar operaciones
+   * Método público que puede ser llamado desde otros servicios
    */
-  private async checkTableExists(tableName: string): Promise<boolean> {
+  public async checkTableExists(tableName: string): Promise<boolean> {
     try {
       console.log(`Checking if table ${tableName} exists...`);
       await this.dynamoDb.describeTable({ TableName: tableName }).promise();
@@ -109,8 +110,8 @@ export class DailyStockTokenService {
         const stocks = response.data.items;
         const nextToken = response.data.nextToken;
 
-        // Procesar en lotes más pequeños para evitar sobrecargar DynamoDB
-        const batchSize = 10;
+        // Procesar en lotes más grandes para cubrir más stocks
+        const batchSize = 25; // Incrementado de 10 a 25
         for (let i = 0; i < stocks.length; i += batchSize) {
           const batch = stocks.slice(i, i + batchSize);
           
@@ -118,6 +119,7 @@ export class DailyStockTokenService {
             batch.map(async (stock) => {
               if (!processedSymbols.has(stock.symbol)) {
                 try {
+                  // Guardamos el token de la página donde se encontró el stock
                   await this.stockTokenRepository.saveToken(stock.symbol, currentToken || '');
                   processedSymbols.add(stock.symbol);
                 } catch (error: any) {
