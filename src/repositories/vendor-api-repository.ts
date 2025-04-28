@@ -1,9 +1,16 @@
 import axios, { AxiosInstance } from 'axios';
 import { ListStocksResponse, BuyStockParams, BuyStockResponse } from '../types/vendor/stock-api';
 
+/**
+ * Repositorio para interactuar con la API externa de stocks (Vendor).
+ * Encapsula las llamadas HTTP para listar, obtener precio y comprar acciones.
+ */
 export class VendorApiRepository {
   private client: AxiosInstance;
 
+  /**
+   * Inicializa el repositorio con un cliente Axios configurado.
+   */
   constructor() {
     this.client = axios.create({
       baseURL: process.env.VENDOR_API_URL || 'https://api.challenge.fusefinance.com',
@@ -15,6 +22,11 @@ export class VendorApiRepository {
     });
   }
 
+  /**
+   * Obtiene la lista de acciones disponibles desde el proveedor externo.
+   * @param nextToken Token de paginación opcional.
+   * @returns Promesa con la respuesta de la API (lista de acciones y nextToken).
+   */
   async listStocks(nextToken?: string): Promise<ListStocksResponse> {
     const config: any = {};
     if (nextToken) {
@@ -24,6 +36,13 @@ export class VendorApiRepository {
     return response.data;
   }
 
+  /**
+   * Obtiene el precio actual de una acción por su símbolo.
+   * @param symbol Símbolo de la acción.
+   * @param nextToken Token de paginación opcional.
+   * @returns Promesa con el precio de la acción.
+   * @throws Si la acción no se encuentra.
+   */
   async getStockPrice(symbol: string, nextToken?: string): Promise<number> {
     const response = await this.listStocks(nextToken);
     const stock = response.data.items.find((item: any) => item.symbol === symbol);
@@ -31,10 +50,14 @@ export class VendorApiRepository {
     return stock.price;
   }
 
+  /**
+   * Ejecuta la compra de una acción a través de la API externa.
+   * @param symbol Símbolo de la acción a comprar.
+   * @param params Parámetros de la compra (portafolio, precio, cantidad).
+   * @returns Promesa con la respuesta de la compra.
+   */
   async buyStock(symbol: string, params: BuyStockParams): Promise<BuyStockResponse> {
     const response = await this.client.post(`/stocks/${symbol}/buy`, params);
     return response.data;
   }
-
-  // Aquí puedes agregar otros métodos como getStockPrice, etc.
 } 
