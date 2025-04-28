@@ -36,23 +36,42 @@ Before you begin, ensure you have the following installed:
 
 4. Edit the `.env` file with your configuration values:
    ```
+   # Node environment
+   NODE_ENV=development
+
    # Database Configuration
-   DB_USERNAME=postgres
-   DB_PASSWORD=postgres
-   DB_NAME=stock_trading
    DB_HOST=localhost
    DB_PORT=5432
+   DB_NAME=fuse_stocks
+   DB_USER=postgres
+   DB_PASSWORD=postgres
+   DB_SSL=false
+   
+   # DynamoDB Configuration
+   DYNAMODB_REGION=us-east-1
+   DYNAMODB_ACCESS_KEY_ID=local
+   DYNAMODB_SECRET_ACCESS_KEY=local
+   DYNAMODB_ENDPOINT=http://localhost:8000
+   DYNAMODB_TABLE=fuse-stock-tokens-dev
    
    # Vendor API Configuration
    VENDOR_API_URL=https://api.challenge.fusefinance.com
    VENDOR_API_KEY=your_api_key_here
    
-   # Email settings for reports
+   # Email Configuration
    EMAIL_PROVIDER=smtp
    EMAIL_SENDER=reports@example.com
    REPORT_RECIPIENTS=admin@example.com
+   
+   # SMTP settings (for local development)
    SMTP_HOST=localhost
    SMTP_PORT=1025
+   SMTP_AUTH=false
+   SMTP_USER=
+   SMTP_PASSWORD=
+   
+   # AWS settings (for production)
+   AWS_REGION=us-east-1
    ```
 
 ## Running the Service Locally
