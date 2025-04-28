@@ -27,17 +27,17 @@ export class DailyStockTokenService {
    */
   public async checkTableExists(tableName: string): Promise<boolean> {
     try {
-      console.log(`Checking if table ${tableName} exists...`);
+      console.log(`Verificando si la tabla ${tableName} existe...`);
       await this.dynamoDb.describeTable({ TableName: tableName }).promise();
-      console.log(`Table ${tableName} exists`);
+      console.log(`¡La tabla ${tableName} existe!`);
       return true;
     } catch (error: any) {
       if (error.code === 'ResourceNotFoundException') {
-        console.warn(`Table ${tableName} does not exist. Creating table...`);
+        console.warn(`La tabla ${tableName} no existe. Creando tabla...`);
         await this.createTable(tableName);
         return true;
       }
-      console.error(`Error checking table ${tableName}:`, error);
+      console.error(`Error al verificar la tabla ${tableName}:`, error);
       return false;
     }
   }
@@ -84,21 +84,21 @@ export class DailyStockTokenService {
    */
   public async updateStockTokens(): Promise<void> {
     if (this.isRunning) {
-      console.log('Update already in progress');
+      console.log('Actualización ya en progreso');
       return;
     }
 
     this.isRunning = true;
-    console.log('Starting daily stock token update');
+    console.log('Iniciando actualización diaria de tokens de acciones');
 
     try {
       // Obtener nombre de tabla del repositorio
-      const tableName = process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local';
+      const tableName = process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-dev';
       
       // Verificar si la tabla existe
       const tableExists = await this.checkTableExists(tableName);
       if (!tableExists) {
-        throw new Error(`Table ${tableName} does not exist and could not be created`);
+        throw new Error(`La tabla ${tableName} no existe y no se pudo crear`);
       }
 
       let currentToken: string | undefined;
@@ -106,12 +106,15 @@ export class DailyStockTokenService {
       const failedSymbols: string[] = [];
 
       do {
+        console.log(`Obteniendo lote de acciones${currentToken ? ' con token' : ''}...`);
         const response = await this.vendorApi.listStocks(currentToken);
         const stocks = response.data.items;
         const nextToken = response.data.nextToken;
+        
+        console.log(`Procesando lote de ${stocks.length} acciones...`);
 
         // Procesar en lotes más grandes para cubrir más stocks
-        const batchSize = 25; // Incrementado de 10 a 25
+        const batchSize = 25;
         for (let i = 0; i < stocks.length; i += batchSize) {
           const batch = stocks.slice(i, i + batchSize);
           
@@ -123,7 +126,7 @@ export class DailyStockTokenService {
                   await this.stockTokenRepository.saveToken(stock.symbol, currentToken || '');
                   processedSymbols.add(stock.symbol);
                 } catch (error: any) {
-                  console.error(`Error saving token for ${stock.symbol}:`, error);
+                  console.error(`Error al guardar token para ${stock.symbol}:`, error);
                   failedSymbols.push(stock.symbol);
                   // No propagar el error para que otros símbolos continúen procesándose
                 }
@@ -135,12 +138,12 @@ export class DailyStockTokenService {
         currentToken = nextToken;
       } while (currentToken);
 
-      console.log(`Successfully updated tokens for ${processedSymbols.size} stocks`);
+      console.log(`Se actualizaron correctamente los tokens para ${processedSymbols.size} acciones`);
       if (failedSymbols.length > 0) {
-        console.warn(`Failed to update tokens for ${failedSymbols.length} stocks: ${failedSymbols.join(', ')}`);
+        console.warn(`Falló la actualización de tokens para ${failedSymbols.length} acciones: ${failedSymbols.join(', ')}`);
       }
     } catch (error: any) {
-      console.error('Error updating stock tokens:', error);
+      console.error('Error en la actualización de tokens de acciones:', error);
       throw error;
     } finally {
       this.isRunning = false;

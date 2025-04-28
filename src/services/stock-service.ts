@@ -136,16 +136,19 @@ export class StockService {
         return cachedStock.data;
       }
       
-      // Primero intentamos con el token específico del stock
+      console.log(`Buscando token para ${symbol} en DynamoDB...`);
+      // Primero buscamos en la tabla de DynamoDB para obtener el token de la acción
       const token = await this.getStockToken(symbol);
       
-      // Si hay token, buscamos en esa página específica
       if (token) {
-        console.log(`Getting page with token for ${symbol}`);
+        console.log(`Token encontrado para ${symbol} en DynamoDB, usando token: ${token}`);
         try {
+          // Usamos el token para acceder directamente a la página correcta
           const response = await this.vendorApi.listStocks(token);
           const stock = response.data.items.find(item => item.symbol === symbol);
+          
           if (stock) {
+            console.log(`Acción ${symbol} encontrada con token de DynamoDB`);
             const vendorStock = {
               symbol: stock.symbol,
               name: stock.name,
@@ -160,28 +163,31 @@ export class StockService {
             };
             
             return vendorStock;
+          } else {
+            console.log(`No se encontró la acción ${symbol} con el token almacenado, iniciando búsqueda en múltiples páginas`);
           }
         } catch (error) {
-          console.warn(`Error using token for ${symbol}, will search in multiple pages`, error);
-          // Si hay error con el token, continuamos con la búsqueda normal
+          console.warn(`Error al usar token para ${symbol}, iniciando búsqueda en múltiples páginas`, error);
         }
+      } else {
+        console.log(`No se encontró token para ${symbol} en DynamoDB, iniciando búsqueda en múltiples páginas`);
       }
 
-      // Si no hay token o no encontramos el stock en la página del token,
-      // buscamos en varias páginas, pero menos que antes para optimizar
-      console.log(`Searching ${symbol} in multiple pages...`);
+      // Si no hay token en DynamoDB o no encontramos el stock con el token,
+      // buscamos en varias páginas
+      console.log(`Buscando ${symbol} en múltiples páginas...`);
       
       let currentToken: string | undefined = undefined;
       let pageCount = 0;
-      const MAX_PAGES = 10; // Aumentado de 2 a 10 páginas para mejorar la búsqueda
+      const MAX_PAGES = 10;
       
       do {
-        console.log(`Searching ${symbol} in page ${pageCount + 1}`);
+        console.log(`Buscando ${symbol} en página ${pageCount + 1}`);
         const response = await this.vendorApi.listStocks(currentToken);
         const stock = response.data.items.find(item => item.symbol === symbol);
         
         if (stock) {
-          console.log(`Found ${symbol} in page ${pageCount + 1}`);
+          console.log(`Encontrada acción ${symbol} en página ${pageCount + 1}`);
           const vendorStock = {
             symbol: stock.symbol,
             name: stock.name,
@@ -190,9 +196,10 @@ export class StockService {
           };
           
           // Guardar token para optimizar búsquedas futuras
+          console.log(`Guardando token para ${symbol} en DynamoDB para futuras búsquedas`);
           await this.stockTokenRepository.saveToken(symbol, currentToken || '');
           
-          // Guardar en caché con tiempo actual
+          // Guardar en caché
           this.stockCache[symbol] = {
             data: vendorStock,
             timestamp: now
@@ -206,10 +213,10 @@ export class StockService {
         
       } while (currentToken && pageCount < MAX_PAGES);
       
-      console.warn(`Stock not found: ${symbol} after searching ${pageCount} pages`);
+      console.warn(`Stock no encontrado: ${symbol} después de buscar en ${pageCount} páginas`);
       return null;
     } catch (error) {
-      console.error(`Error getting stock ${symbol}:`, error);
+      console.error(`Error al obtener stock ${symbol}:`, error);
       throw error;
     }
   }
