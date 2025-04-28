@@ -5,17 +5,37 @@ import { ITransaction } from '../types/models/transaction';
 import { TransactionType, TransactionStatus } from '../types/common/enums';
 import { StockService } from './stock-service';
 import { UserRepository } from '../repositories/user-repository';
+import { PortfolioCacheService } from './portfolio-cache-service';
+import { DynamoDB } from 'aws-sdk';
 
 /**
  * Service to handle portfolio-related operations
  */
 export class PortfolioService {
+  private cacheService: PortfolioCacheService;
+
   constructor(
     private portfolioRepository: PortfolioRepository,
     private transactionRepository: TransactionRepository,
     private userRepository: UserRepository,
-    private stockService: StockService
-  ) {}
+    private stockService: StockService,
+    cacheService?: PortfolioCacheService
+  ) {
+    // If no cache service is provided, create one
+    if (!cacheService) {
+      const dynamoDb = new DynamoDB.DocumentClient({
+        region: process.env.DYNAMODB_REGION || 'us-east-1',
+        credentials: {
+          accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+          secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
+        },
+        endpoint: process.env.DYNAMODB_ENDPOINT
+      });
+      this.cacheService = new PortfolioCacheService(dynamoDb);
+    } else {
+      this.cacheService = cacheService;
+    }
+  }
 
   /**
    * Gets all portfolios for a user
@@ -83,6 +103,17 @@ export class PortfolioService {
         status: TransactionStatus.COMPLETED
       });
 
+      // Get the portfolio to find the userId
+      const portfolio = await this.portfolioRepository.findById(portfolioId);
+      if (portfolio) {
+        // Invalidate all caches related to this user after a transaction
+        await this.cacheService.invalidateAllUserRelatedCaches(
+          portfolio.user_id, 
+          [portfolioId]
+        );
+        console.log(`Cache invalidated for user ${portfolio.user_id} after transaction`);
+      }
+
       return transaction;
     } catch (error) {
       console.error('Error executing stock purchase:', error);
@@ -95,9 +126,26 @@ export class PortfolioService {
    */
   async getUserPortfolioSummary(userId: string): Promise<any> {
     try {
+      // Check cache first
+      const cachedData = await this.cacheService.getCachedUserPortfolioSummary(userId);
+      if (cachedData) {
+        console.log(`Using cached portfolio summary for user: ${userId}`);
+        
+        // Add a flag to indicate this data came from cache
+        if (typeof cachedData === 'object') {
+          return {
+            ...cachedData,
+            isCached: true,
+            cacheTimestamp: new Date().toISOString()
+          };
+        }
+        
+        return cachedData;
+      }
+
       const portfolios = await this.portfolioRepository.findByUserId(userId);
       if (!portfolios || portfolios.length === 0) {
-        return {
+        const emptyResponse = {
           status: "success",
           data: {
             userId,
@@ -105,18 +153,28 @@ export class PortfolioService {
             currency: "USD",
             lastUpdated: new Date().toISOString(),
             stocks: []
-          }
+          },
+          isCached: false
         };
+        
+        // Cache empty response
+        await this.cacheService.cacheUserPortfolioSummary(userId, emptyResponse);
+        return emptyResponse;
       }
 
       // Por ahora solo manejamos el primer portfolio del usuario
       const portfolio = portfolios[0];
       const summary = await this.getPortfolioSummary(portfolio.id);
 
-      return {
+      const response = {
         status: "success",
-        data: summary
+        data: summary,
+        isCached: false
       };
+      
+      // Cache the response
+      await this.cacheService.cacheUserPortfolioSummary(userId, response);
+      return response;
     } catch (error) {
       console.error('Error getting portfolio summary:', error);
       throw error;
@@ -128,6 +186,16 @@ export class PortfolioService {
    */
   async getPortfolioSummary(portfolioId: number): Promise<PortfolioSummaryResponse> {
     try {
+      // Check cache first
+      const cachedData = await this.cacheService.getCachedPortfolioSummary(portfolioId);
+      if (cachedData) {
+        console.log(`Using cached portfolio summary for portfolio: ${portfolioId}`);
+        return {
+          ...cachedData,
+          fromCache: true
+        };
+      }
+
       // Obtenemos el portfolio
       const portfolio = await this.portfolioRepository.findById(portfolioId);
       if (!portfolio) {
@@ -177,13 +245,18 @@ export class PortfolioService {
       // Actualizamos el valor total en la base de datos
       await this.portfolioRepository.updateValueAndTimestamp(portfolioId, totalValue);
 
-      return {
+      const response = {
         userId: portfolio.user_id,
         totalValue: Number(totalValue.toFixed(2)),
         currency: "USD",
         lastUpdated: new Date().toISOString(),
-        stocks
+        stocks,
+        fromCache: false
       };
+
+      // Cache the response
+      await this.cacheService.cachePortfolioSummary(portfolioId, response);
+      return response;
     } catch (error) {
       console.error('Error getting portfolio summary:', error);
       throw error;

@@ -35,6 +35,19 @@ const tables = [
       ReadCapacityUnits: 5,
       WriteCapacityUnits: 5
     }
+  },
+  {
+    TableName: 'fuse-portfolio-cache-local',
+    KeySchema: [
+      { AttributeName: 'key', KeyType: 'HASH' }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: 'key', AttributeType: 'S' }
+    ],
+    ProvisionedThroughput: {
+      ReadCapacityUnits: 5,
+      WriteCapacityUnits: 5
+    }
   }
 ];
 
@@ -64,20 +77,24 @@ async function initializeDynamoDB() {
       await createTable(table);
     }
 
-    // Configurar TTL para la tabla de caché si existe
-    const cacheTableName = 'fuse-stock-cache-local';
-    if (existingTables.TableNames.includes(cacheTableName)) {
-      try {
-        await dynamodb.updateTimeToLive({
-          TableName: cacheTableName,
-          TimeToLiveSpecification: {
-            AttributeName: 'ttl',
-            Enabled: true
-          }
-        }).promise();
-        console.log(`TTL configurado para la tabla ${cacheTableName}`);
-      } catch (err) {
-        console.error(`Error configurando TTL para la tabla ${cacheTableName}:`, err);
+    // Lista de tablas con TTL
+    const tablesWithTTL = ['fuse-stock-cache-local', 'fuse-portfolio-cache-local'];
+    
+    // Configurar TTL para las tablas de caché
+    for (const tableName of tablesWithTTL) {
+      if (existingTables.TableNames.includes(tableName)) {
+        try {
+          await dynamodb.updateTimeToLive({
+            TableName: tableName,
+            TimeToLiveSpecification: {
+              AttributeName: 'ttl',
+              Enabled: true
+            }
+          }).promise();
+          console.log(`TTL configurado para la tabla ${tableName}`);
+        } catch (err) {
+          console.error(`Error configurando TTL para la tabla ${tableName}:`, err);
+        }
       }
     }
 

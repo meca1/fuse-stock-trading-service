@@ -13,11 +13,43 @@ import { DynamoDB } from 'aws-sdk';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
 import { VendorApiRepository } from '../../repositories/vendor-api-repository';
+import { PortfolioCacheService } from '../../services/portfolio-cache-service';
+
+// We need to manually define service factory to fix the module not found error
+const getStockServiceInstance = () => {
+  const { StockService } = require('../../services/stock-service');
+  const { StockTokenRepository } = require('../../repositories/stock-token-repository');
+  const { VendorApiClient } = require('../../services/vendor/api-client');
+  const { VendorApiRepository } = require('../../repositories/vendor-api-repository');
+  
+  const dynamoDb = new DynamoDB.DocumentClient({
+    region: process.env.DYNAMODB_REGION || 'us-east-1',
+    credentials: {
+      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
+    },
+    endpoint: process.env.DYNAMODB_ENDPOINT
+  });
+  
+  const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
+  const vendorApiRepository = new VendorApiRepository();
+  const vendorApi = new VendorApiClient(vendorApiRepository);
+  return new StockService(stockTokenRepo, vendorApi);
+};
 
 /**
  * Handler to get the portfolio summary for a user
  */
 const listPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  // Log all environment variables related to DynamoDB for debugging
+  console.log('DynamoDB Configuration', {
+    region: process.env.DYNAMODB_REGION || 'N/A',
+    endpoint: process.env.DYNAMODB_ENDPOINT || 'N/A',
+    portfolioCacheTable: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
+    stocksTable: process.env.DYNAMODB_TABLE || 'N/A',
+    stockCacheTable: process.env.STOCK_CACHE_TABLE || 'N/A'
+  });
+
   // Validate path parameters
   const paramsResult = listPortfoliosParamsSchema.safeParse(event.pathParameters || {});
   
@@ -37,6 +69,8 @@ const listPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGa
   const portfolioRepository = new PortfolioRepository(dbService);
   const transactionRepository = new TransactionRepository(dbService);
   const userRepository = new UserRepository(dbService);
+  
+  // Setup DynamoDB for cache service
   const dynamoDb = new DynamoDB.DocumentClient({
     region: process.env.DYNAMODB_REGION || 'us-east-1',
     credentials: {
@@ -45,16 +79,36 @@ const listPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGa
     },
     endpoint: process.env.DYNAMODB_ENDPOINT
   });
-  const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
-  const vendorApiRepository = new VendorApiRepository();
-  const vendorApi = new VendorApiClient(vendorApiRepository);
-  const stockService = new StockService(stockTokenRepo, vendorApi);
+  
+  // Create the cache service
+  const portfolioCacheService = new PortfolioCacheService(
+    dynamoDb, 
+    process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local'
+  );
+  
+  // Check if the cache table exists
+  try {
+    const tableExists = await portfolioCacheService.checkTableExists();
+    console.log(`Portfolio cache table check result: ${tableExists ? 'Table exists' : 'Table does not exist'}`);
+  } catch (error) {
+    console.error('Error checking if portfolio cache table exists:', error);
+    // We'll continue anyway, the cache service will disable itself if needed
+  }
+  
+  // Get the optimized stock service
+  const stockService = getStockServiceInstance();
+  
+  // Create portfolio service with cache
   const portfolioService = new PortfolioService(
     portfolioRepository,
     transactionRepository,
     userRepository,
-    stockService
+    stockService,
+    portfolioCacheService
   );
+  
+  // Get portfolio summary (now uses cache)
+  console.log(`Requesting portfolio summary for user: ${userId}`);
   const summary = await portfolioService.getUserPortfolioSummary(userId);
 
   return {
@@ -64,7 +118,10 @@ const listPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGa
     },
     body: JSON.stringify({
       status: 'success',
-      data: summary
+      data: summary,
+      metadata: {
+        cached: !!summary.isCached
+      }
     })
   };
 };
