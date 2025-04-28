@@ -2,17 +2,12 @@ import { VendorApiClient } from './vendor/api-client';
 import { StockTokenRepository } from '../repositories/stock-token-repository';
 
 export class DailyStockTokenService {
-  private vendorApi: VendorApiClient;
-  private stockTokenRepository: StockTokenRepository;
   private isRunning = false;
 
   constructor(
-    stockTokenRepository: StockTokenRepository,
-    vendorApi: VendorApiClient
-  ) {
-    this.vendorApi = vendorApi;
-    this.stockTokenRepository = stockTokenRepository;
-  }
+    private stockTokenRepository: StockTokenRepository,
+    private vendorApi: VendorApiClient
+  ) {}
 
   public async updateStockTokens(): Promise<void> {
     if (this.isRunning) {

@@ -6,16 +6,10 @@ import { StockTokenRepository } from '../repositories/stock-token-repository';
  * Service to handle stock-related operations and token management
  */
 export class StockService {
-  private vendorApi: VendorApiClient;
-  private stockTokenRepository: StockTokenRepository;
-
   constructor(
-    stockTokenRepository: StockTokenRepository,
-    vendorApi: VendorApiClient
-  ) {
-    this.vendorApi = vendorApi;
-    this.stockTokenRepository = stockTokenRepository;
-  }
+    private stockTokenRepository: StockTokenRepository,
+    private vendorApi: VendorApiClient
+  ) {}
 
   /**
    * Gets a stock's pagination token from the repository
