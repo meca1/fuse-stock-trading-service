@@ -165,6 +165,23 @@ When running locally, all emails are sent to MailHog. Open the following URL in 
 http://localhost:8025
 ```
 
+### Running Only MailHog Email Service
+
+If you need to start only the MailHog service (for example, after clearing Docker containers):
+
+```bash
+docker-compose up -d mailhog
+```
+
+MailHog provides:
+- A simple SMTP server that captures all outgoing emails (listening on port 1025)
+- A web interface to view captured emails (accessible at http://localhost:8025)
+- Search and filtering capabilities for emails
+- HTML and plain text email viewing
+- JSON API for automated testing
+
+No configuration is needed as the application is already set up to use MailHog as the email provider when running in development mode.
+
 ## Running Tests
 
 Run unit tests:

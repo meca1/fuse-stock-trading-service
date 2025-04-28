@@ -23,6 +23,8 @@ services:
         condition: service_healthy
       dynamodb:
         condition: service_started
+      mailhog:
+        condition: service_started
     volumes:
       - .:/app
       - /app/node_modules
@@ -52,6 +54,14 @@ services:
     command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal"
     volumes:
       - dynamodb_data:/home/dynamodblocal
+      
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP server port
+      - "8025:8025"  # Web UI port
+    environment:
+      - MH_STORAGE=memory
 
 volumes:
   postgres_data:
