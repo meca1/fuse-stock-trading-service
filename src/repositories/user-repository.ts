@@ -5,9 +5,9 @@ export class UserRepository {
   constructor(private readonly dbService: DatabaseService) {}
 
   /**
-   * Finds a user by their ID
-   * @param id User ID
-   * @returns User object or null if not found
+   * Finds a user by their unique ID.
+   * @param id - The user ID to search for.
+   * @returns The user object if found, or null if not found.
    */
   async findById(id: string): Promise<IUser | null> {
     const result = await this.dbService.query<IUser>(

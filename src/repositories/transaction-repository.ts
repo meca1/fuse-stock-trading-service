@@ -5,7 +5,9 @@ export class TransactionRepository {
   constructor(private readonly dbService: DatabaseService) {}
 
   /**
-   * Crea una nueva transacción
+   * Creates a new transaction in the database.
+   * @param transaction - Object with the new transaction data (without id, created_at, or updated_at).
+   * @returns The created transaction with all its fields.
    */
   async create(transaction: Omit<ITransaction, 'id' | 'created_at' | 'updated_at'>): Promise<ITransaction> {
     const result = await this.dbService.query<ITransaction>(
