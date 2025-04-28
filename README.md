@@ -47,6 +47,9 @@ Before you begin, ensure you have the following installed:
    DB_PASSWORD=postgres
    DB_SSL=false
    
+   # Database URL for migrations (required for dbmate)
+   DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuse_stocks?sslmode=disable
+   
    # DynamoDB Configuration
    DYNAMODB_REGION=us-east-1
    DYNAMODB_ACCESS_KEY_ID=local
