@@ -41,7 +41,7 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
   const { price, quantity, userId } = bodyResult.data;
   
   // Get stock details and current price from StockService
-  const stockService = StockService.getInstance();
+  const stockService = new StockService();
   const stockDetails = await stockService.getStockBySymbol(symbol);
   
   if (!stockDetails) {
@@ -89,7 +89,12 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
   }
 
   // Execute purchase
-  const portfolioService = await PortfolioService.getInstance();
+  const portfolioService = new PortfolioService(
+    portfolioRepository,
+    new (require('../../repositories/transaction-repository').TransactionRepository)(dbService),
+    userRepository,
+    stockService
+  );
   const transaction = await portfolioService.executeStockPurchase(
     portfolio.id,
     symbol,

@@ -4,39 +4,27 @@ import { IPortfolio, PortfolioStock, PortfolioSummaryResponse } from '../types/m
 import { ITransaction } from '../types/models/transaction';
 import { TransactionType, TransactionStatus } from '../types/common/enums';
 import { StockService } from './stock-service';
-import { VendorApiClient } from './vendor/api-client';
 import { UserRepository } from '../repositories/user-repository';
-import { DatabaseService } from '../config/database';
 
 /**
  * Service to handle portfolio-related operations
  */
 export class PortfolioService {
-  private static instance: PortfolioService | null = null;
-  private portfolioRepository!: PortfolioRepository;
-  private transactionRepository!: TransactionRepository;
-  private stockService!: StockService;
-  private vendorApi!: VendorApiClient;
-  private userRepository!: UserRepository;
-  private dbService!: DatabaseService;
+  private portfolioRepository: PortfolioRepository;
+  private transactionRepository: TransactionRepository;
+  private stockService: StockService;
+  private userRepository: UserRepository;
 
-  private constructor() {}
-
-  private async initializeServices() {
-    this.dbService = await DatabaseService.getInstance();
-    this.portfolioRepository = new PortfolioRepository(this.dbService);
-    this.transactionRepository = new TransactionRepository(this.dbService);
-    this.stockService = new StockService();
-    this.vendorApi = VendorApiClient.getInstance();
-    this.userRepository = new UserRepository(this.dbService);
-  }
-
-  public static async getInstance(): Promise<PortfolioService> {
-    if (!PortfolioService.instance) {
-      PortfolioService.instance = new PortfolioService();
-      await PortfolioService.instance.initializeServices();
-    }
-    return PortfolioService.instance;
+  constructor(
+    portfolioRepository: PortfolioRepository,
+    transactionRepository: TransactionRepository,
+    userRepository: UserRepository,
+    stockService: StockService
+  ) {
+    this.portfolioRepository = portfolioRepository;
+    this.transactionRepository = transactionRepository;
+    this.userRepository = userRepository;
+    this.stockService = stockService;
   }
 
   /**

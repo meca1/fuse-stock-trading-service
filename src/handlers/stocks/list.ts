@@ -64,7 +64,7 @@ const listStocksHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewa
     ({ items, nextToken: newNextToken, totalItems, lastUpdated } = cachedData);
   } else {
     // 4. Consultar al proveedor externo
-    const stockService = StockService.getInstance();
+    const stockService = new StockService();
     const result = await stockService.listAllStocks(nextToken, search);
     items = result.stocks.map(stock => ({
       symbol: stock.symbol,
