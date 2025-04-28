@@ -1,68 +1,29 @@
 import { VendorApiClient } from './vendor/api-client';
 import { VendorStock, ListStocksResponse, EnhancedVendorStock } from '../types/models/stock';
-import { DynamoDB } from 'aws-sdk';
+import { StockTokenRepository } from '../repositories/stock-token-repository';
 
 /**
  * Service to handle stock-related operations and token management
  */
 export class StockService {
-  private static instance: StockService;
   private vendorApi: VendorApiClient;
-  private dynamoDb: DynamoDB.DocumentClient;
-  private readonly tableName: string;
+  private stockTokenRepository: StockTokenRepository;
 
-  private constructor() {
-    this.vendorApi = VendorApiClient.getInstance();
-    
-    // DynamoDB configuration
-    const config: DynamoDB.DocumentClient.DocumentClientOptions & DynamoDB.ClientConfiguration = {
-      region: process.env.DYNAMODB_REGION || 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
-      }
-    };
-
-    if (process.env.DYNAMODB_ENDPOINT) {
-      config.endpoint = process.env.DYNAMODB_ENDPOINT;
-    }
-    
-    this.dynamoDb = new DynamoDB.DocumentClient(config);
-    this.tableName = process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local';
-  }
-
-  public static getInstance(): StockService {
-    if (!StockService.instance) {
-      StockService.instance = new StockService();
-    }
-    return StockService.instance;
+  constructor(
+    stockTokenRepository?: StockTokenRepository,
+    vendorApi?: VendorApiClient
+  ) {
+    this.vendorApi = vendorApi || VendorApiClient.getInstance();
+    this.stockTokenRepository = stockTokenRepository || new StockTokenRepository();
   }
 
   /**
-   * Gets a stock's pagination token from DynamoDB
+   * Gets a stock's pagination token from the repository
    * @param symbol Stock symbol
    * @returns Token string or null if not found
    */
   private async getStockToken(symbol: string): Promise<string | null> {
-    try {
-      const params: DynamoDB.DocumentClient.GetItemInput = {
-        TableName: this.tableName,
-        Key: {
-          symbol
-        }
-      };
-
-      const result = await this.dynamoDb.get(params).promise();
-      
-      if (result.Item && 'nextToken' in result.Item) {
-        return result.Item.nextToken;
-      }
-      
-      return null;
-    } catch (error) {
-      console.error(`Error getting token for symbol ${symbol}:`, error);
-      throw error;
-    }
+    return this.stockTokenRepository.getToken(symbol);
   }
 
   /**

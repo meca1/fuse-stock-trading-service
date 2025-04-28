@@ -26,7 +26,7 @@ export class PortfolioService {
     this.dbService = await DatabaseService.getInstance();
     this.portfolioRepository = new PortfolioRepository(this.dbService);
     this.transactionRepository = new TransactionRepository(this.dbService);
-    this.stockService = StockService.getInstance();
+    this.stockService = new StockService();
     this.vendorApi = VendorApiClient.getInstance();
     this.userRepository = new UserRepository(this.dbService);
   }
