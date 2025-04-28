@@ -77,75 +77,35 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
   const dynamoDb = new DynamoDB.DocumentClient(dynamoConfig);
   const stockService = getStockServiceInstance();
   
+  // Inicializar database service en paralelo con la validación
+  const dbServicePromise = DatabaseService.getInstance();
+  
   // Esperar la validación de parámetros
   const { symbol, price, quantity, userId, parsedBody } = await paramsPromise;
   
-  // Obtener información del stock, pero primero actualizaremos la tabla de tokens
-  // para asegurar que podemos encontrar todos los stocks disponibles
-  console.log('Ensuring stock token table is updated before searching for stock...');
-  
-  try {
-    const dailyStockService = new (require('../../services/daily-stock-token-service').DailyStockTokenService)(
-      stockService.getStockTokenRepository(),
-      stockService.getVendorApi()
-    );
-
-    // Verificar si la tabla existe y actualizarla si es necesario
-    await dailyStockService.checkTableExists(process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
-    
-    // Buscar y guardar información específica sobre el stock que se está comprando
-    // (No esperamos a que termine la actualización completa, que podría ser lenta)
-    const loadSpecificStock = async () => {
-      console.log(`Pre-loading token for specific stock: ${symbol}`);
-      const vendorApi = stockService.getVendorApi();
-      let currentToken: string | undefined = undefined;
-      let found = false;
-      
-      // Buscar en las primeras páginas para encontrar el stock específico
-      for (let i = 0; i < 3 && !found; i++) {
-        const response: any = await vendorApi.listStocks(currentToken);
-        const stock = response.data.items.find((item: any) => item.symbol === symbol);
-        
-        if (stock) {
-          console.log(`Found ${symbol} during pre-loading on page ${i+1}`);
-          await stockService.getStockTokenRepository().saveToken(symbol, currentToken || '');
-          found = true;
-        }
-        
-        currentToken = response.data.nextToken;
-        if (!currentToken) break;
-      }
-      
-      return found;
-    };
-    
-    // Ejecutar la pre-carga de tokens para este stock específico
-    const preloadResult = await loadSpecificStock();
-    console.log(`Pre-loading result for ${symbol}: ${preloadResult ? 'Found and cached' : 'Not found'}`);
-    
-  } catch (error) {
-    // Si hay un error en la pre-carga, lo registramos pero continuamos
-    console.warn('Error during stock token pre-loading:', error);
-  }
-  
-  // Obtener información del stock, usuario y portfolios en paralelo
-  console.log('Fetching stock, user and portfolios in parallel');
+  // Obtener información del stock y DB service en paralelo
+  console.log('Fetching stock and database connection in parallel');
   const [stockDetails, dbService] = await Promise.all([
     stockService.getStockBySymbol(symbol),
-    DatabaseService.getInstance()
+    dbServicePromise
   ]);
   
   if (!stockDetails) {
     throw new NotFoundError('Stock', symbol);
   }
 
+  // Inicializar repositorios
+  const portfolioRepository = new PortfolioRepository(dbService);
+  const userRepository = new UserRepository(dbService);
+  const transactionRepository = new (require('../../repositories/transaction-repository').TransactionRepository)(dbService);
+  
   // Procesamiento de precio
   const numericCurrentPrice = Number(stockDetails.price);
   if (isNaN(numericCurrentPrice)) {
     throw new AppError('Invalid current price received from service', 500, 'INTERNAL_ERROR');
   }
   
-  // Validar precio (ahora usando el método de validación del stock service)
+  // Validar precio (usando el método de validación del stock service)
   if (!stockService.isValidPrice(numericCurrentPrice, price)) {
     console.log('Price validation failed', {
       requestedPrice: price,
@@ -158,11 +118,6 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
     );
   }
   
-  // Inicializar repositorios
-  const portfolioRepository = new PortfolioRepository(dbService);
-  const userRepository = new UserRepository(dbService);
-  const transactionRepository = new (require('../../repositories/transaction-repository').TransactionRepository)(dbService);
-  
   // Obtener datos de usuario y portfolios en paralelo
   const [user, portfolios] = await Promise.all([
     userRepository.findById(userId),
@@ -173,15 +128,16 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
     throw new NotFoundError('User', userId);
   }
   
-  // Determinar el portfolio a utilizar
-  let portfolio: IPortfolio;
+  // Determinar el portfolio a utilizar y crear servicios mientras tanto
+  let portfolioPromise;
+  let createPortfolioPromise;
+  
   if (!portfolios || portfolios.length === 0) {
-    portfolio = await portfolioRepository.create({
+    // Iniciar la creación del portfolio sin await
+    createPortfolioPromise = portfolioRepository.create({
       user_id: userId,
       name: `${user.name}'s Portfolio`
     } as Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>);
-  } else {
-    portfolio = portfolios[0];
   }
 
   // Inicializar servicio de portfolio con cache
@@ -197,6 +153,15 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
     stockService,
     portfolioCacheService
   );
+  
+  // Resolver el portfolio (esperar creación si fue necesario)
+  const portfolio = (!portfolios || portfolios.length === 0) 
+    ? await createPortfolioPromise!
+    : portfolios[0];
+    
+  if (!portfolio) {
+    throw new Error('Failed to determine portfolio for user');
+  }
   
   // Ejecutar la compra
   console.log(`Executing stock purchase for portfolio ${portfolio.id}, user ${userId}`);

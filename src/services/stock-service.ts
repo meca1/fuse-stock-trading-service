@@ -15,7 +15,9 @@ interface StockCache {
  */
 export class StockService {
   private stockCache: StockCache = {};
-  private CACHE_TTL = 60 * 1000; // 1 minuto en milisegundos
+  private CACHE_TTL = 300 * 1000; // 5 minutos en milisegundos (aumentado de 1 a 5 minutos)
+  // Evitar solicitudes duplicadas - Promise puede ser null pero TypeScript debe saberlo
+  private requestsInProgress: Record<string, Promise<VendorStock | null>> = {};
 
   constructor(
     private stockTokenRepository: StockTokenRepository,
@@ -101,55 +103,80 @@ export class StockService {
    * @returns Stock or null if it doesn't exist
    */
   public async getStockBySymbol(symbol: string): Promise<VendorStock | null> {
+    // Si ya hay una solicitud en curso para este símbolo, reutilizarla
+    if (this.requestsInProgress[symbol]) {
+      console.log(`Request already in progress for ${symbol}, reusing promise`);
+      return this.requestsInProgress[symbol];
+    }
+
+    // Crear una nueva promesa para esta solicitud y guardarla
+    const requestPromise = this._fetchStockBySymbol(symbol);
+    this.requestsInProgress[symbol] = requestPromise;
+
+    try {
+      const result = await requestPromise;
+      return result;
+    } finally {
+      // Limpiar la referencia cuando se complete
+      delete this.requestsInProgress[symbol];
+    }
+  }
+
+  /**
+   * Implementación interna de búsqueda de stock
+   */
+  private async _fetchStockBySymbol(symbol: string): Promise<VendorStock | null> {
     try {
       // Verificar caché primero
       const now = Date.now();
       const cachedStock = this.stockCache[symbol];
       
       if (cachedStock && (now - cachedStock.timestamp) < this.CACHE_TTL) {
-        console.log(`Using cached data for ${symbol}, age: ${now - cachedStock.timestamp}ms`);
+        console.log(`Using cached data for ${symbol}, age: ${(now - cachedStock.timestamp)/1000}s`);
         return cachedStock.data;
       }
       
       // Primero intentamos con el token específico del stock
       const token = await this.getStockToken(symbol);
-      console.log(`Token found for ${symbol}:`, token);
       
       // Si hay token, buscamos en esa página específica
       if (token) {
         console.log(`Getting page with token for ${symbol}`);
-        const response = await this.vendorApi.listStocks(token);
-        console.log(`Response for ${symbol}:`, JSON.stringify(response.data));
-        
-        const stock = response.data.items.find(item => item.symbol === symbol);
-        if (stock) {
-          const vendorStock = {
-            symbol: stock.symbol,
-            name: stock.name,
-            price: stock.price,
-            exchange: stock.exchange || 'NYSE'
-          };
-          
-          // Guardar en caché
-          this.stockCache[symbol] = {
-            data: vendorStock,
-            timestamp: now
-          };
-          
-          return vendorStock;
+        try {
+          const response = await this.vendorApi.listStocks(token);
+          const stock = response.data.items.find(item => item.symbol === symbol);
+          if (stock) {
+            const vendorStock = {
+              symbol: stock.symbol,
+              name: stock.name,
+              price: stock.price,
+              exchange: stock.exchange || 'NYSE'
+            };
+            
+            // Guardar en caché
+            this.stockCache[symbol] = {
+              data: vendorStock,
+              timestamp: now
+            };
+            
+            return vendorStock;
+          }
+        } catch (error) {
+          console.warn(`Error using token for ${symbol}, will search in multiple pages`, error);
+          // Si hay error con el token, continuamos con la búsqueda normal
         }
       }
 
       // Si no hay token o no encontramos el stock en la página del token,
-      // buscamos en varias páginas, no solo en la primera
+      // buscamos en varias páginas, pero menos que antes para optimizar
       console.log(`Searching ${symbol} in multiple pages...`);
       
       let currentToken: string | undefined = undefined;
       let pageCount = 0;
-      const MAX_PAGES = 5; // Limitamos la búsqueda a 5 páginas para evitar problemas de rendimiento
+      const MAX_PAGES = 2; // Reducido de 5 a 2 páginas para mejorar el rendimiento
       
       do {
-        console.log(`Searching ${symbol} in page ${pageCount + 1} with token: ${currentToken || 'null'}`);
+        console.log(`Searching ${symbol} in page ${pageCount + 1}`);
         const response = await this.vendorApi.listStocks(currentToken);
         const stock = response.data.items.find(item => item.symbol === symbol);
         
@@ -164,9 +191,8 @@ export class StockService {
           
           // Guardar token para optimizar búsquedas futuras
           await this.stockTokenRepository.saveToken(symbol, currentToken || '');
-          console.log(`Saved token for ${symbol}: ${currentToken || 'null'}`);
           
-          // Guardar en caché
+          // Guardar en caché con tiempo actual
           this.stockCache[symbol] = {
             data: vendorStock,
             timestamp: now
