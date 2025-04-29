@@ -22,10 +22,8 @@ export interface ListStocksResponse {
   };
 }
 
-// Parámetros para comprar un stock
+// Parámetros para comprar un stock según la API del vendor
 export interface BuyStockParams {
-  portfolioId: number;
-  symbol: string;
   price: number;
   quantity: number;
 }
