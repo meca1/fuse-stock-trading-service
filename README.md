@@ -41,13 +41,13 @@ Before you begin, ensure you have the following installed:
 
    # Database Configuration (PostgreSQL)
    DB_HOST=localhost
-   DB_PORT=5432          # PostgreSQL puerto 5432 en Docker Compose
+   DB_PORT=5432          # PostgreSQL port 5432 in Docker Compose
    DB_NAME=stock_trading
    DB_USERNAME=postgres
    DB_PASSWORD=postgres
    DATABASE_URL=postgres://postgres:postgres@localhost:5432/stock_trading?sslmode=disable
    
-   # DynamoDB Configuration (para caché de tokens)
+   # DynamoDB Configuration (for token caching)
    DYNAMODB_ENDPOINT=http://localhost:8000
    USE_DYNAMODB_CACHE=true
    
@@ -61,25 +61,25 @@ Before you begin, ensure you have the following installed:
    VENDOR_API_KEY=nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e
    
    # Email Configuration
-   # IMPORTANTE: Para desarrollo local usar 'smtp', para producción usar 'ses'
-   EMAIL_PROVIDER=smtp   # Obligatorio: 'smtp' para desarrollo, 'ses' para producción
+   # IMPORTANT: Use 'smtp' for local development, 'ses' for production
+   EMAIL_PROVIDER=smtp   # Required: 'smtp' for development, 'ses' for production
    EMAIL_SENDER=reports@localhost
    REPORT_RECIPIENTS=admin@example.com
    
-   # SMTP settings (para desarrollo local con MailHog)
+   # SMTP settings (for local development with MailHog)
    SMTP_HOST=localhost
    SMTP_PORT=1025
    SMTP_AUTH=false
    SMTP_USER=
    SMTP_PASSWORD=
    
-   # AWS settings (para producción)
-   # En producción, configurar las credenciales de AWS para SES:
+   # AWS settings (for production)
+   # In production, configure AWS credentials for SES:
    # AWS_ACCESS_KEY_ID=
    # AWS_SECRET_ACCESS_KEY=
    ```
 
-   > **IMPORTANTE**: Para el envío de correos en entorno local, es crítico configurar `EMAIL_PROVIDER=smtp`. De lo contrario, el sistema intentará usar AWS SES y fallará con error de credenciales.
+   > **IMPORTANT**: For email sending in local environments, it's critical to configure `EMAIL_PROVIDER=smtp`. Otherwise, the system will try to use AWS SES and will fail with credential errors.
 
 ## Running the Service Locally
 
@@ -92,19 +92,13 @@ docker-compose up -d
 ```
 
 This starts:
-- PostgreSQL on port 5432
+- PostgreSQL on port 5432 (with automatic migrations)
 - DynamoDB Local on port 8000
 - MailHog (SMTP testing) on ports 1025 (SMTP) and 8025 (Web UI)
 
-### 2. Initialize Database
+> **NOTE**: The PostgreSQL database is automatically initialized with all necessary migrations through Docker Compose. It's not necessary to run migrations manually in local environment.
 
-Run database migrations:
-
-```bash
-npm run db:migrate
-```
-
-### 3. Initialize DynamoDB Tables
+### 2. Initialize DynamoDB Tables
 
 Set up the required DynamoDB tables:
 
@@ -112,7 +106,7 @@ Set up the required DynamoDB tables:
 npm run dynamodb:init
 ```
 
-### 4. Initialize Stock Tokens
+### 3. Initialize Stock Tokens
 
 Before using the main endpoints, you need to initialize the stock tokens in DynamoDB. This is required for the caching system to work properly:
 
@@ -130,7 +124,7 @@ This endpoint will fetch stock data from the vendor API and store tokens in Dyna
 
 The endpoint is also scheduled to run automatically every day at 00:00 UTC in production to refresh the stock tokens.
 
-### 5. Start the Development Server
+### 4. Start the Development Server
 
 Start the local serverless development environment:
 
@@ -142,7 +136,7 @@ The service will now be running at `http://localhost:3000`.
 
 ## Testing the Endpoints
 
-> **IMPORTANT**: Make sure you've initialized the stock tokens by running the `update-stock-tokens` endpoint as mentioned in step 4 before testing these endpoints.
+> **IMPORTANT**: Make sure you've initialized the stock tokens by running the `update-stock-tokens` endpoint as mentioned in step 3 before testing these endpoints.
 
 Use curl, Postman, or any HTTP client to test the endpoints:
 
@@ -172,45 +166,45 @@ The service includes a feature to generate daily transaction reports and send th
 
 ### Running a Report Manually
 
-Para generar un reporte para la fecha ACTUAL (por defecto):
+To generate a report for the CURRENT date (default):
 
 ```bash
 curl -X POST "http://localhost:3000/dev/generate-report"
 ```
 
-Para generar un reporte para una fecha específica:
+To generate a report for a specific date:
 
 ```bash
 curl -X POST "http://localhost:3000/dev/generate-report?date=2025-04-28"
 ```
 
-También puedes usar los scripts proporcionados:
+You can also use the provided scripts:
 
 ```bash
 node scripts/local/quick-report.js
 ```
 
-### Fechas y Zonas Horarias
+### Dates and Time Zones
 
-El sistema utiliza UTC para todas las operaciones relacionadas con fechas:
+The system uses UTC for all date-related operations:
 
-- Las transacciones se almacenan con timestamps UTC en la base de datos
-- Los reportes diarios buscan transacciones de 00:00:00 UTC a 23:59:59 UTC del día especificado
-- Por defecto, el endpoint `/generate-report` usa la fecha actual, no la de ayer
+- Transactions are stored with UTC timestamps in the database
+- Daily reports search for transactions from 00:00:00 UTC to 23:59:59 UTC of the specified day
+- By default, the `/generate-report` endpoint uses the current date, not yesterday's
 
-### Configuración de Email para Reportes
+### Email Configuration for Reports
 
-Para que el envío de reportes por email funcione correctamente:
+For email reports to work correctly:
 
-1. En entorno local:
-   - Asegúrate de que `EMAIL_PROVIDER=smtp` en tu archivo `.env`
-   - MailHog debe estar en ejecución (incluido en el docker-compose)
-   - Los reportes se pueden ver en `http://localhost:8025`
+1. In local environment:
+   - Make sure `EMAIL_PROVIDER=smtp` is set in your `.env` file
+   - MailHog must be running (included in docker-compose)
+   - Reports can be viewed at `http://localhost:8025`
 
-2. En producción:
-   - Configura `EMAIL_PROVIDER=ses` 
-   - Proporciona credenciales AWS válidas con permisos para SES
-   - Verifica las direcciones de correo en AWS SES antes de enviar
+2. In production:
+   - Configure `EMAIL_PROVIDER=ses`
+   - Provide valid AWS credentials with SES permissions
+   - Verify email addresses in AWS SES before sending
 
 ### Viewing Generated Reports
 
@@ -267,6 +261,14 @@ npm run deploy:dev
 
 ### Deploy to Production Environment
 
+Before deploying to production, you must run the database migrations:
+
+```bash
+npm run db:migrate
+```
+
+Then, you can deploy the application:
+
 ```bash
 npm run deploy:prod
 ```
@@ -284,7 +286,7 @@ serverless deploy --stage prod
 - `npm test`: Run unit tests
 - `npm run lint`: Run linting checks
 - `npm run db:init`: Initialize the database
-- `npm run db:migrate`: Run database migrations
+- `npm run db:migrate`: Run database migrations (only necessary for production)
 - `npm run dynamodb:init`: Initialize DynamoDB tables
 - `npm run report:daily`: Generate and send a daily report
 - `npm run report:daily:cron`: Run the report service with cron scheduler
@@ -294,20 +296,20 @@ serverless deploy --stage prod
 ### Local Database Connection Issues
 - Ensure Docker is running and containers are up
 - Check database credentials in `.env` file
-- Verify database port is 5432 (not 5432)
+- Verify database port is 5432
 
 ### Email Sending Issues
 - Check MailHog is running (`http://localhost:8025`)
 - Verify `EMAIL_PROVIDER=smtp` is set in `.env` file
-- El problema más común es que el sistema intenta usar AWS SES cuando debería usar SMTP local
+- The most common problem is that the system tries to use AWS SES when it should use local SMTP
 
-### Problemas con Fechas en Reportes
-- Si el reporte muestra "0 transactions" aunque hay transacciones en esa fecha:
-  - Verifica que las transacciones estén dentro del rango de horas UTC de esa fecha
-  - Asegúrate de que el servidor y la BD estén usando la misma zona horaria (UTC)
-  - Usa el parámetro `?date=YYYY-MM-DD` para especificar exactamente la fecha que necesitas
+### Date Issues in Reports
+- If the report shows "0 transactions" even though there are transactions on that date:
+  - Verify that the transactions are within the UTC hour range for that date
+  - Make sure the server and DB are using the same timezone (UTC)
+  - Use the `?date=YYYY-MM-DD` parameter to specify exactly the date you need
 
-### Resolución de Problemas Comunes
-- **Error "InvalidClientTokenId"**: Indica que está intentando usar AWS SES sin credenciales válidas. Solución: cambiar a `EMAIL_PROVIDER=smtp` en el archivo `.env`.
-- **Error "No transactions found"**: Verifica la fecha del reporte y asegúrate de que hay transacciones para esa fecha específica en UTC.
-- **Error de conexión a Base de Datos**: Asegúrate de usar el puerto 5432 para PostgreSQL, no el puerto 5432 por defecto.
+### Common Problem Resolution
+- **"InvalidClientTokenId" Error**: Indicates that it's trying to use AWS SES without valid credentials. Solution: change to `EMAIL_PROVIDER=smtp` in the `.env` file.
+- **"No transactions found" Error**: Verify the report date and make sure there are transactions for that specific date in UTC.
+- **Database Connection Error**: Make sure to use port 5432 for PostgreSQL.
