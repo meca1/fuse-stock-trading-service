@@ -1,5 +1,9 @@
 # Technical Report - Fuse Stock Trading Service
 
+## Rate Limiting Implementation
+
+The system restricts API traffic to 10 requests per second and a maximum of 5 concurrent requests across all endpoints. When clients exceed these limits, they receive a 429 error and must wait before retrying. We didn't implement API keys or special authentication - this basic protection applies equally to everyone. If someone tries to flood the API with too many rapid requests, the system automatically rejects them to keep the service running smoothly for all users.
+
 ## Architecture Overview
 
 The service is implemented as a serverless microservice using AWS Lambda functions with a focus on scalability and reliability when interacting with an unreliable vendor API.
@@ -396,12 +400,50 @@ This implementation balances transaction security with system performance, ensur
 - Implemented token transformation system
 - Added adjacent page pre-fetching
 
+### Challenge 4: API Security and Abuse Prevention
+
+**Problem**: Protecting APIs from abuse while maintaining simplicity.
+
+**Solution**:
+- **Simplified Rate Limiting Strategy**:
+  - Implemented a straightforward global throttling approach
+  - Set maximum of 10 requests per second for all endpoints
+  - Configured maximum of 5 concurrent requests at any time
+
+- **Technical Implementation**:
+  ```yaml
+  apiGateway:
+    throttling:
+      maxRequestsPerSecond: 10
+      maxConcurrentRequests: 5
+  ```
+
+- **Benefits of this Approach**:
+  - Zero authentication overhead (no API keys to manage)
+  - Fair usage policy applies equally to all clients
+  - Simpler developer experience without authentication challenges
+  - Easier deployment and configuration management
+  - Reduced operational complexity without multiple usage tiers
+
+- **Monitoring and Alerts**:
+  - CloudWatch metrics to track API traffic patterns
+  - Alarms configured for sustained high traffic
+  - Automatic notification of potential abuse attempts
+
+This implementation prioritizes simplicity and ease of use while still providing essential protection against abuse, creating a more accessible API without compromising on basic security.
+
 ## Security Implementation
 
-- API key authentication
 - Encrypted data at rest
 - Principle of least privilege in IAM roles
 - Network isolation via VPC configuration
+- **Rate limiting**:
+  - Implemented global API Gateway throttling
+  - Maximum of 10 requests per second across all endpoints
+  - Maximum of 5 concurrent requests at any time
+  - Simple configuration eliminates need for complex usage plans
+  - Protects against denial-of-service attacks without adding API key management overhead
+  - Consistent experience for all users of the API
 
 ## Deployment Approach
 

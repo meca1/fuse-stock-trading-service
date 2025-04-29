@@ -42,6 +42,11 @@ custom:
   stockTokensTable: fuse-stock-tokens-${self:provider.stage}
   stockCacheTable: fuse-stock-cache-${self:provider.stage}
   dynamodbEndpoint: ${env:DYNAMODB_ENDPOINT, 'http://localhost:8000'}
+  # API Gateway throttling settings
+  apiGateway:
+    throttling:
+      maxRequestsPerSecond: 10
+      maxConcurrentRequests: 5
 
 provider:
   name: aws
