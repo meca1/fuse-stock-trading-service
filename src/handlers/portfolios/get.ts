@@ -40,7 +40,7 @@ const getStockServiceInstance = () => {
 /**
  * Handler to get the portfolio summary for a user
  */
-const listPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+const getPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   // Log all environment variables related to DynamoDB for debugging
   console.log('DynamoDB Configuration', {
     region: process.env.DYNAMODB_REGION || 'N/A',
@@ -127,4 +127,4 @@ const listPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGa
   };
 };
 
-export const handler = wrapHandler(listPortfoliosHandler);
+export const handler = wrapHandler(getPortfoliosHandler);

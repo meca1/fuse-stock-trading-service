@@ -1,5 +1,5 @@
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import { handler } from '../portfolios/list';
+import { handler } from '../portfolios/get';
 import { DatabaseService } from '../../config/database';
 import { PortfolioRepository } from '../../repositories/portfolio-repository';
 import { TransactionRepository } from '../../repositories/transaction-repository';

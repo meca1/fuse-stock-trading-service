@@ -76,7 +76,7 @@ functions:
           cors: true
            
   getUserPortfolios:
-    handler: src/handlers/portfolios/list.handler
+    handler: src/handlers/portfolios/get.handler
     events:
       - http:
           path: /users/{userId}/portfolios
