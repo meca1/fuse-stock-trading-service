@@ -49,13 +49,13 @@ describe('VendorApiRepository', () => {
   describe('buyStock', () => {
     it('should return buy response', async () => {
       client.post.mockResolvedValueOnce({ data: { status: 200, data: { transactionId: 't1', symbol: 'AAPL', price: 100, quantity: 1, timestamp: 'now' } } });
-      const result = await repo.buyStock('AAPL', { portfolioId: 1, symbol: 'AAPL', price: 100, quantity: 1 });
+      const result = await repo.buyStock('AAPL', { price: 100, quantity: 1 });
       expect(result.data.transactionId).toBe('t1');
       expect(client.post).toHaveBeenCalledWith('/stocks/AAPL/buy', { portfolioId: 1, symbol: 'AAPL', price: 100, quantity: 1 });
     });
     it('should throw if axios fails', async () => {
       client.post.mockRejectedValueOnce(new Error('fail'));
-      await expect(repo.buyStock('AAPL', { portfolioId: 1, symbol: 'AAPL', price: 100, quantity: 1 })).rejects.toThrow('fail');
+      await expect(repo.buyStock('AAPL', { price: 100, quantity: 1 })).rejects.toThrow('fail');
     });
   });
 }); 
