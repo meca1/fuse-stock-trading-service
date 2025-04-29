@@ -31,12 +31,14 @@ export interface BuyStockParams {
 // Respuesta de la API para comprar un stock
 export interface BuyStockResponse {
   status: number;
-  data: {
-    transactionId: string;
-    symbol: string;
-    price: number;
-    quantity: number;
-    timestamp: string; // ISO date string
+  message: string;
+  data?: {
+    order?: {
+      symbol: string;
+      quantity: number;
+      price: number;
+      total: number;
+    }
   };
 }
 

@@ -39,6 +39,39 @@ export class StockService {
   }
 
   /**
+   * Executes a stock purchase through the vendor API
+   * @param symbol Stock symbol
+   * @param price Price to buy at
+   * @param quantity Quantity to buy
+   * @returns Response from the vendor API
+   */
+  public async buyStock(symbol: string, price: number, quantity: number): Promise<any> {
+    try {
+      // First check if the stock exists
+      const stock = await this.getStockBySymbol(symbol);
+      if (!stock) {
+        throw new Error(`Stock with symbol ${symbol} not found`);
+      }
+      
+      // Then validate the price
+      if (!this.isValidPrice(stock.price, price)) {
+        throw new Error(`Price must be within 2% of current price ($${stock.price})`);
+      }
+      
+      // Execute the purchase
+      const response = await this.vendorApi.buyStock(symbol, {
+        price,
+        quantity
+      });
+      
+      return response;
+    } catch (error) {
+      console.error(`Error buying stock ${symbol}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Gets a stock's pagination token from the repository
    * @param symbol Stock symbol
    * @returns Token string or null if not found

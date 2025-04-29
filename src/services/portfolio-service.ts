@@ -112,6 +112,13 @@ export class PortfolioService {
         throw new Error(`Price must be within 2% of current price ($${stock.price})`);
       }
 
+      // Ejecutar la compra a través de la API externa del proveedor
+      const buyResponse = await this.stockService.buyStock(symbol, price, quantity);
+      
+      if (buyResponse.status !== 200) {
+        throw new Error(`Error buying stock: ${buyResponse.message}`);
+      }
+
       // Crear la transacción
       const transaction = await this.transactionRepository.create({
         portfolio_id: portfolioId,
