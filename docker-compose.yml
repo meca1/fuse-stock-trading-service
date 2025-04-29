@@ -19,8 +19,8 @@ services:
       - DYNAMODB_ACCESS_KEY_ID=local
       - DYNAMODB_SECRET_ACCESS_KEY=local
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
       dynamodb:
         condition: service_started
       mailhog:
@@ -28,7 +28,27 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-    command: sh -c "npm install && npm run db:migrate && npm run dynamodb:init && npx serverless offline --stage local --host 0.0.0.0"
+    command: sh -c "npm install && npm run dynamodb:init && npx serverless offline --stage local --host 0.0.0.0"
+      
+  migrations:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=stock_trading
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/stock_trading?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run db:migrate"
 
   postgres:
     image: postgres:15-alpine
