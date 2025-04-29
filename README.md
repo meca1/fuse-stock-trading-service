@@ -51,6 +51,11 @@ Before you begin, ensure you have the following installed:
    DYNAMODB_ENDPOINT=http://localhost:8000
    USE_DYNAMODB_CACHE=true
    
+   # AWS credentials for local development with DynamoDB Local
+   AWS_ACCESS_KEY_ID=local
+   AWS_SECRET_ACCESS_KEY=local
+   AWS_REGION=us-east-1
+   
    # Vendor API Configuration
    VENDOR_API_URL=https://api.challenge.fusefinance.com
    VENDOR_API_KEY=nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e
@@ -69,7 +74,6 @@ Before you begin, ensure you have the following installed:
    SMTP_PASSWORD=
    
    # AWS settings (para producción)
-   AWS_REGION=us-east-1
    # En producción, configurar las credenciales de AWS para SES:
    # AWS_ACCESS_KEY_ID=
    # AWS_SECRET_ACCESS_KEY=
