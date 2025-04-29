@@ -146,38 +146,67 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    Client->>API Gateway: POST /stocks/{symbol}/buy {price, quantity, userId}
-    API Gateway->>Lambda: Invoke handler
+    Client->>Backend: POST /stocks/{symbol}/buy
     
-    Lambda->>Service: Process purchase request
+    Backend->>StockService: Execute purchase(symbol, price, quantity)
+    StockService->>Cache: Check stock data
     
-    Service->>Validation: Verify request data
-    
-    alt Data Invalid
-        Validation->>Service: Return validation error
-        Service->>Lambda: Return error response
-    else Data Valid
-        Service->>StockService: Get current market price
-        StockService->>Service: Return current price (e.g., $100)
-        
-        Service->>Service: Compare requested price with market price
-        Note over Service: Example: If market price is $100<br>and requested price is $95 (>2% difference),<br>transaction fails
-        
-        alt Price Difference > 2%
-            Service->>Database: Log failed transaction
-            Service->>Lambda: Return price error (e.g., "Price must be within 2% of $100")
-        else Price Difference <= 2%
-            Service->>Database: Execute purchase transaction
-            Database->>Service: Confirm transaction
-            
-            Service->>Cache: Invalidate related caches
-            
-            Service->>Lambda: Return success response
-        end
+    alt Cache Hit
+        Cache->>StockService: Return cached stock data
+    else Cache Miss
+        StockService->>VendorAPI: GET stock information
+        VendorAPI->>StockService: Return stock data
+        StockService->>Cache: Update cache
     end
     
-    Lambda->>API Gateway: Return formatted response
-    API Gateway->>Client: JSON response
+    StockService->>StockService: Validate price within 2% of market price
+    
+    alt Price Valid
+        StockService->>VendorAPI: POST /stocks/{symbol}/buy
+        
+        alt Success (200)
+            VendorAPI->>StockService: Order placed successfully
+            StockService->>Database: Record transaction
+            StockService->>Cache: Invalidate portfolio caches
+            StockService->>Backend: Return success
+            Backend->>Client: Success response
+            
+        else Client Error (400/404)
+            VendorAPI->>StockService: Error (price/quantity invalid or stock not found)
+            StockService->>Database: Log failed transaction
+            StockService->>Backend: Return error details
+            Backend->>Client: Error response
+            
+        else Server Error (500)
+            VendorAPI->>StockService: Internal server error
+            
+            loop Retry (max 3 attempts)
+                StockService->>StockService: Wait (1s, 2s, 3s)
+                StockService->>VendorAPI: Retry purchase
+                
+                alt Success on Retry
+                    VendorAPI->>StockService: Order placed successfully
+                    StockService->>Database: Record transaction
+                    StockService->>Cache: Invalidate portfolio caches
+                    StockService->>Backend: Return success
+                    Backend->>Client: Success response
+                    
+                else Continued Failure
+                    VendorAPI->>StockService: Error response
+                end
+            end
+            
+            Note over StockService: After max retries
+            StockService->>Database: Log failed transaction
+            StockService->>Backend: Return error
+            Backend->>Client: Error response
+        end
+        
+    else Price Invalid (>2% difference)
+        StockService->>Database: Log validation failure
+        StockService->>Backend: Return price validation error
+        Backend->>Client: Error response
+    end
 ```
 
 ### Daily Report Endpoint (Cron)
