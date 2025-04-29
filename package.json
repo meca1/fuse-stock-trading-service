@@ -7,7 +7,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "dev": "serverless offline",
+    "dev": "serverless offline --stage local",
     "deploy": "serverless deploy",
     "deploy:prod": "serverless deploy --stage prod",
     "lint": "eslint . --ext .ts",
