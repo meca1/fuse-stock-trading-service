@@ -113,7 +113,13 @@ npm run dynamodb:init
 Before using the main endpoints, you need to initialize the stock tokens in DynamoDB. This is required for the caching system to work properly:
 
 ```bash
-curl -X POST "http://localhost:3000/dev/update-stock-tokens"
+# For local development with DynamoDB Local:
+curl -X POST "http://localhost:3000/dev/update-stock-tokens" \
+  -H "x-api-key: your_api_key_here"
+
+# If you encounter authentication errors, try running:
+AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local npm run dynamodb:init
+AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local serverless invoke local --function updateStockTokens
 ```
 
 This endpoint will fetch stock data from the vendor API and store tokens in DynamoDB for efficient pagination and caching. Without running this endpoint first, the stock listing and purchase endpoints may not work correctly.
