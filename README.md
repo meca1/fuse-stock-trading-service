@@ -108,41 +108,32 @@ npm run dynamodb:init
 
 ### 3. Initialize Stock Tokens
 
-Before using the main endpoints, you need to initialize the stock tokens in DynamoDB. This is required for the caching system to work properly:
+Before using the main endpoints, you need to initialize the stock tokens in DynamoDB. This is required for the caching system to work properly.
+
+The most reliable way to do this is directly within the Docker container:
 
 ```bash
-# For local development with DynamoDB Local:
+docker-compose run --rm app npx serverless invoke local --function updateStockTokens --data '{}' --stage local
+```
+
+This command:
+- Runs the lambda in the app container with all dependencies configured
+- Passes an empty object as the event data (required for schema validation) 
+- Uses the local stage configuration
+
+Alternative methods:
+```bash
+# HTTP endpoint (when server is running):
 curl -X POST "http://localhost:3000/dev/update-stock-tokens" \
   -H "x-api-key: your_api_key_here"
 
-# If you encounter authentication errors, try running:
-AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local npm run dynamodb:init
-AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local serverless invoke local --function updateStockTokens
-
-# To run the updateStockTokens lambda directly in the Docker container:
-docker-compose run --rm app npx serverless invoke local --function updateStockTokens --data '{}' --stage local
+# Direct serverless invocation:
+serverless invoke local --function updateStockTokens --data '{}' --stage local
 ```
 
-This endpoint will fetch stock data from the vendor API and store tokens in DynamoDB for efficient pagination and caching. Without running this endpoint first, the stock listing and purchase endpoints may not work correctly.
+When successful, the lambda will fetch stock data from the vendor API and store tokens in DynamoDB for efficient pagination and caching. Without this initialization, stock listing and purchase endpoints may not work correctly.
 
-The endpoint is also scheduled to run automatically every day at 00:00 UTC in production to refresh the stock tokens.
-
-#### Running updateStockTokens in Docker
-
-The `updateStockTokens` lambda function can be executed directly within the Docker container to ensure all environment variables and dependencies are correctly configured:
-
-```bash
-docker-compose run --rm app npx serverless invoke local --function updateStockTokens --data '{}' --stage local
-```
-
-Key components of this command:
-- `docker-compose run --rm app`: Runs a command in the app service container and removes it when finished
-- `npx serverless invoke local`: Invokes the lambda function locally
-- `--function updateStockTokens`: Specifies which lambda function to run
-- `--data '{}'`: Passes an empty JSON object as the event data (required to pass schema validation)
-- `--stage local`: Uses the local stage configuration
-
-When successful, the lambda will retrieve stock data from the vendor API and store tokens in the DynamoDB table. You should see output indicating the tokens were successfully saved for various stock symbols.
+This process is automatically scheduled to run daily at 00:00 UTC in production environments.
 
 ### 4. Start the Development Server
 
