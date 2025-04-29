@@ -87,17 +87,32 @@ This approach achieved 99.9% availability despite vendor API instability.
 
 ```mermaid
 sequenceDiagram
-    Client->>API Gateway: GET /stocks
+    Client->>API Gateway: GET /stocks?search=&nextToken=
     API Gateway->>Lambda: Invoke stocks handler
-    Lambda->>DynamoDB: Check cache
+    
+    Lambda->>Lambda: Validate API key
+    Lambda->>Lambda: Parse query parameters
+    Lambda->>Lambda: Generate cache key from search+pagination
+    
+    Lambda->>DynamoDB: Check cache (TTL: 5min)
+    
     alt Cache Hit
         DynamoDB->>Lambda: Return cached stocks
     else Cache Miss
-        Lambda->>Vendor API: Request stocks data
-        Vendor API->>Lambda: Return stocks data
-        Lambda->>DynamoDB: Update cache
+        Lambda->>StockService: Initialize service
+        StockService->>Vendor API: Request stocks (with pagination)
+        Vendor API->>StockService: Return stocks data
+        StockService->>Lambda: Return transformed data
+        
+        Lambda->>DynamoDB: Cache current page results
+        
+        alt Has Next Page Token
+            Lambda->>DynamoDB: Pre-cache next page token
+        end
     end
-    Lambda->>API Gateway: Return response
+    
+    Lambda->>Lambda: Build response with metadata
+    Lambda->>API Gateway: Return response with cache status
     API Gateway->>Client: JSON response
 ```
 
@@ -127,39 +142,31 @@ sequenceDiagram
     API Gateway->>Client: JSON response
 ```
 
-### Portfolio Transactions Endpoint
+### Buy Stock Endpoint
 
 ```mermaid
 sequenceDiagram
-    Client->>API Gateway: POST /portfolios/{id}/transactions
-    API Gateway->>Lambda: Invoke transaction handler
-    Lambda->>DynamoDB: Get current stock price
-    alt Price within threshold
-        Lambda->>Service: Validate transaction
-        Service->>PostgreSQL: Begin transaction
-        Service->>PostgreSQL: Update portfolio balance
-        Service->>PostgreSQL: Create transaction record
-        PostgreSQL->>Service: Commit transaction
-        Service->>Lambda: Return success
-    else Price deviation > 2%
-        Lambda->>API Gateway: Return price error
+    Client->>API Gateway: POST /stocks/{symbol}/buy
+    API Gateway->>Lambda: Invoke buy-stock handler
+    Lambda->>Lambda: Validate request parameters
+    
+    par Parallel Requests
+        Lambda->>StockService: Get current stock price
+        Lambda->>PortfolioService: Get user's portfolio
     end
-    Lambda->>API Gateway: Return response
-    API Gateway->>Client: JSON response
-```
-
-### Portfolio Details Endpoint
-
-```mermaid
-sequenceDiagram
-    Client->>API Gateway: GET /portfolios/{id}
-    API Gateway->>Lambda: Invoke portfolio handler
-    Lambda->>PostgreSQL: Query portfolio data
-    PostgreSQL->>Lambda: Return portfolio data
-    Lambda->>DynamoDB: Get current stock prices
-    DynamoDB->>Lambda: Return stock prices
-    Lambda->>Service: Calculate portfolio valuation
-    Service->>Lambda: Return complete portfolio
+    
+    alt Price within threshold (2%)
+        Lambda->>PortfolioService: Execute stock purchase
+        PortfolioService->>PostgreSQL: Begin transaction
+        PostgreSQL->>PortfolioService: Return transaction result
+        
+        PortfolioService->>DynamoDB: Invalidate portfolio cache (async)
+        
+        PortfolioService->>Lambda: Return transaction details
+    else Price deviation > 2%
+        Lambda->>API Gateway: Return price validation error
+    end
+    
     Lambda->>API Gateway: Return response
     API Gateway->>Client: JSON response
 ```
@@ -176,6 +183,32 @@ sequenceDiagram
     Lambda->>SES: Send email with report
     SES->>Lambda: Confirm delivery
 ```
+
+## Stock List Endpoint Implementation
+
+The Stock List endpoint implements a sophisticated caching and pagination strategy:
+
+1. **Advanced Caching**:
+   - Context-aware cache keys incorporating search terms and pagination tokens
+   - TTL of 5 minutes to match vendor API price update frequency
+   - Separate cache entries for each page of results to ensure pagination consistency
+
+2. **Pagination Optimization**:
+   - Automatically pre-caches next page tokens with shorter TTL (60 seconds)
+   - Preserves exact pagination tokens between requests
+   - Uses base64 encoding for token-based keys to ensure consistency
+
+3. **Request Validation**:
+   - API key authentication for controlled access
+   - Schema validation for query parameters
+   - Consistent error handling via middleware
+
+4. **Error Resilience**:
+   - Graceful degradation if cache service has issues
+   - Detailed logging for monitoring and troubleshooting
+   - Request metadata in responses for debugging
+
+This implementation enables a responsive user experience with minimal API calls to the vendor service, while maintaining data freshness through appropriate cache expiration.
 
 ## User Portfolios Endpoint Implementation
 
@@ -197,6 +230,27 @@ The User Portfolios endpoint showcases the system's simplified architecture and 
    - Stateless design for horizontal scaling
 
 This endpoint exemplifies a more reliable approach by eliminating external dependencies, with the trade-off of not showing real-time market valuations.
+
+## Buy Stock Endpoint Implementation
+
+The Buy Stock endpoint handles the critical transaction flow for purchasing stocks:
+
+1. **Price Verification Mechanism**:
+   - Fetches current market price before executing transaction
+   - Enforces 2% maximum deviation between requested and market price
+   - Prevents transactions with stale or invalid prices
+
+2. **Transaction Atomicity**:
+   - Uses database transactions to ensure consistency
+   - Records purchase details with timestamps and unique identifiers
+   - Maintains complete audit trail for regulatory compliance
+
+3. **Cache Invalidation Strategy**:
+   - Asynchronously invalidates related portfolio caches
+   - Prevents stale data after transactions without blocking response
+   - Improves user experience while maintaining data consistency
+
+This endpoint demonstrates the system's commitment to data integrity in financial transactions while maintaining responsive performance.
 
 ## Implementation Challenges and Solutions
 
