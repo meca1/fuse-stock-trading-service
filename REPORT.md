@@ -222,6 +222,75 @@ sequenceDiagram
     SES->>Lambda: Confirm delivery
 ```
 
+### Stock Token Update Process
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Lambda as Lambda Handler
+    participant Service as DailyStockTokenService
+    participant Vendor as Vendor API
+    participant DynamoDB
+    
+    Client->>Lambda: Trigger update-stock-tokens
+    Lambda->>Lambda: Validate event
+    Lambda->>Lambda: Initialize services
+    Lambda->>Service: updateStockTokens()
+    
+    Service->>Service: Check if update already running
+    Service->>DynamoDB: Check if table exists
+    
+    alt Table doesn't exist
+        Service->>DynamoDB: Create table
+        Service->>Service: Wait for table to become active
+    end
+    
+    loop While has nextToken
+        Service->>Vendor: listStocks(currentToken)
+        Vendor->>Service: Return batch of stocks
+        
+        loop Process stocks in batches
+            Service->>Service: Group stocks in batches of 25
+            
+            par Process batch in parallel
+                Service->>DynamoDB: Save token for stock 1
+                Service->>DynamoDB: Save token for stock 2
+                Service->>DynamoDB: Save token for stock N
+            end
+        end
+        
+        Service->>Service: Update currentToken from response
+    end
+    
+    Service->>Lambda: Return success
+    Lambda->>Client: Return status 200
+    
+    Note over Service,DynamoDB: Errors with individual stocks<br>don't stop the process,<br>they're logged and skipped
+```
+
+#### Stock Token Update Flow
+
+The token update process follows this flow:
+
+1. **Service Initialization**:
+   - DynamoDB client is initialized with configured credentials
+   - StockTokenRepository is created to interact with the table
+   - VendorApiRepository is initialized to communicate with the external API
+   - DailyStockTokenService is created to manage the update process
+
+2. **Update Process**:
+   - The service retrieves stock pages from the vendor API
+   - For each stock, it saves the pagination token in DynamoDB
+   - These tokens are later used to accelerate specific stock searches
+   - A processing queue is managed to handle large volumes of data
+
+3. **Error Handling**:
+   - Implements retries for connection failures
+   - Records detailed errors for diagnosis
+   - Continues the process even if some stocks fail
+
+This endpoint is scheduled to run automatically every day at 00:00 UTC in production to refresh the tokens. Without running this endpoint first, the stock listing and purchase endpoints may not work correctly.
+
 ## Stock List Endpoint Implementation
 
 The Stock List endpoint implements a sophisticated caching and pagination strategy:
