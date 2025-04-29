@@ -146,28 +146,37 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    Client->>API Gateway: POST /stocks/{symbol}/buy
-    API Gateway->>Lambda: Invoke buy-stock handler
-    Lambda->>Lambda: Validate request parameters
+    Client->>API Gateway: POST /stocks/{symbol}/buy {price, quantity, userId}
+    API Gateway->>Lambda: Invoke handler
     
-    par Parallel Requests
-        Lambda->>StockService: Get current stock price
-        Lambda->>PortfolioService: Get user's portfolio
+    Lambda->>Service: Process purchase request
+    
+    Service->>Validation: Verify request data
+    
+    alt Data Invalid
+        Validation->>Service: Return validation error
+        Service->>Lambda: Return error response
+    else Data Valid
+        Service->>StockService: Get current market price
+        StockService->>Service: Return current price (e.g., $100)
+        
+        Service->>Service: Compare requested price with market price
+        Note over Service: Example: If market price is $100<br>and requested price is $95 (>2% difference),<br>transaction fails
+        
+        alt Price Difference > 2%
+            Service->>Database: Log failed transaction
+            Service->>Lambda: Return price error (e.g., "Price must be within 2% of $100")
+        else Price Difference <= 2%
+            Service->>Database: Execute purchase transaction
+            Database->>Service: Confirm transaction
+            
+            Service->>Cache: Invalidate related caches
+            
+            Service->>Lambda: Return success response
+        end
     end
     
-    alt Price within threshold (2%)
-        Lambda->>PortfolioService: Execute stock purchase
-        PortfolioService->>PostgreSQL: Begin transaction
-        PostgreSQL->>PortfolioService: Return transaction result
-        
-        PortfolioService->>DynamoDB: Invalidate portfolio cache (async)
-        
-        PortfolioService->>Lambda: Return transaction details
-    else Price deviation > 2%
-        Lambda->>API Gateway: Return price validation error
-    end
-    
-    Lambda->>API Gateway: Return response
+    Lambda->>API Gateway: Return formatted response
     API Gateway->>Client: JSON response
 ```
 
@@ -233,24 +242,32 @@ This endpoint exemplifies a more reliable approach by eliminating external depen
 
 ## Buy Stock Endpoint Implementation
 
-The Buy Stock endpoint handles the critical transaction flow for purchasing stocks:
+The Buy Stock endpoint embodies key financial transaction principles:
 
-1. **Price Verification Mechanism**:
-   - Fetches current market price before executing transaction
-   - Enforces 2% maximum deviation between requested and market price
-   - Prevents transactions with stale or invalid prices
+1. **Multi-stage Validation**:
+   - Input validation ensuring data integrity
+   - Market price verification with tolerance threshold
+   - Resource existence confirmation before transaction execution
 
-2. **Transaction Atomicity**:
-   - Uses database transactions to ensure consistency
-   - Records purchase details with timestamps and unique identifiers
-   - Maintains complete audit trail for regulatory compliance
+2. **Price Validation Mechanism**:
+   - Obtains current market price from stock service
+   - Calculates percentage difference between requested and current price
+   - Enforces strict 2% maximum deviation rule
+   - Example: For a stock with market price $100
+     - Request with price $95 fails (5% difference)
+     - Request with price $98.50 succeeds (1.5% difference)
 
-3. **Cache Invalidation Strategy**:
-   - Asynchronously invalidates related portfolio caches
-   - Prevents stale data after transactions without blocking response
-   - Improves user experience while maintaining data consistency
+3. **Transactional Integrity**:
+   - Atomic database operations
+   - Comprehensive transaction history including failures
+   - Automatic portfolio creation when needed
 
-This endpoint demonstrates the system's commitment to data integrity in financial transactions while maintaining responsive performance.
+4. **Performance Optimization**:
+   - Concurrent operations where possible
+   - Asynchronous cache invalidation
+   - Response time measurement and monitoring
+
+This implementation balances transaction security with system performance, ensuring robust handling of financial operations while maintaining a responsive user experience.
 
 ## Implementation Challenges and Solutions
 

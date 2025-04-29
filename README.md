@@ -108,7 +108,19 @@ Set up the required DynamoDB tables:
 npm run dynamodb:init
 ```
 
-### 4. Start the Development Server
+### 4. Initialize Stock Tokens
+
+Before using the main endpoints, you need to initialize the stock tokens in DynamoDB. This is required for the caching system to work properly:
+
+```bash
+curl -X POST "http://localhost:3000/dev/update-stock-tokens"
+```
+
+This endpoint will fetch stock data from the vendor API and store tokens in DynamoDB for efficient pagination and caching. Without running this endpoint first, the stock listing and purchase endpoints may not work correctly.
+
+The endpoint is also scheduled to run automatically every day at 00:00 UTC in production to refresh the stock tokens.
+
+### 5. Start the Development Server
 
 Start the local serverless development environment:
 
@@ -119,6 +131,8 @@ npm run dev
 The service will now be running at `http://localhost:3000`.
 
 ## Testing the Endpoints
+
+> **IMPORTANT**: Make sure you've initialized the stock tokens by running the `update-stock-tokens` endpoint as mentioned in step 4 before testing these endpoints.
 
 Use curl, Postman, or any HTTP client to test the endpoints:
 
