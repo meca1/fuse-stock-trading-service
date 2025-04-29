@@ -12,7 +12,7 @@ flowchart TD
     Services --> DB[(PostgreSQL Database)]
     Services --> AppLayer[Application Layer]
     AppLayer --> DynamoDB[(DynamoDB Cache)]
-    AppLayer --> VendorAPI[Vendor API]
+    AppLayer -.- VendorAPI[Vendor API]
 ```
 
 ## Key Technical Decisions
@@ -80,6 +80,123 @@ This approach achieved 99.9% availability despite vendor API instability.
   - PostgreSQL for transaction data (ACID compliance)
   - DynamoDB for caching and tokens (performance)
   - Designed connection pooling for Lambda environments
+
+## Endpoint Sequence Diagrams
+
+### Stock List Endpoint
+
+```mermaid
+sequenceDiagram
+    Client->>API Gateway: GET /stocks
+    API Gateway->>Lambda: Invoke stocks handler
+    Lambda->>DynamoDB: Check cache
+    alt Cache Hit
+        DynamoDB->>Lambda: Return cached stocks
+    else Cache Miss
+        Lambda->>Vendor API: Request stocks data
+        Vendor API->>Lambda: Return stocks data
+        Lambda->>DynamoDB: Update cache
+    end
+    Lambda->>API Gateway: Return response
+    API Gateway->>Client: JSON response
+```
+
+### User Portfolios Endpoint
+
+```mermaid
+sequenceDiagram
+    Client->>API Gateway: GET /users/{userId}/portfolios
+    API Gateway->>Lambda: Invoke handler
+    
+    Lambda->>Service: Get portfolio data
+    
+    Service->>Cache: Check for cached data
+    
+    alt Cache Available
+        Cache->>Service: Return portfolio data
+    else Cache Miss
+        Service->>Database: Query portfolio records
+        Database->>Service: Return portfolio records
+        
+        Service->>Service: Calculate portfolio value using historical prices
+        Service->>Cache: Update portfolio cache
+    end
+    
+    Service->>Lambda: Return portfolio summary
+    Lambda->>API Gateway: Return response with metadata
+    API Gateway->>Client: JSON response
+```
+
+### Portfolio Transactions Endpoint
+
+```mermaid
+sequenceDiagram
+    Client->>API Gateway: POST /portfolios/{id}/transactions
+    API Gateway->>Lambda: Invoke transaction handler
+    Lambda->>DynamoDB: Get current stock price
+    alt Price within threshold
+        Lambda->>Service: Validate transaction
+        Service->>PostgreSQL: Begin transaction
+        Service->>PostgreSQL: Update portfolio balance
+        Service->>PostgreSQL: Create transaction record
+        PostgreSQL->>Service: Commit transaction
+        Service->>Lambda: Return success
+    else Price deviation > 2%
+        Lambda->>API Gateway: Return price error
+    end
+    Lambda->>API Gateway: Return response
+    API Gateway->>Client: JSON response
+```
+
+### Portfolio Details Endpoint
+
+```mermaid
+sequenceDiagram
+    Client->>API Gateway: GET /portfolios/{id}
+    API Gateway->>Lambda: Invoke portfolio handler
+    Lambda->>PostgreSQL: Query portfolio data
+    PostgreSQL->>Lambda: Return portfolio data
+    Lambda->>DynamoDB: Get current stock prices
+    DynamoDB->>Lambda: Return stock prices
+    Lambda->>Service: Calculate portfolio valuation
+    Service->>Lambda: Return complete portfolio
+    Lambda->>API Gateway: Return response
+    API Gateway->>Client: JSON response
+```
+
+### Daily Report Endpoint (Cron)
+
+```mermaid
+sequenceDiagram
+    EventBridge->>Lambda: Trigger daily report (23:59 UTC)
+    Lambda->>PostgreSQL: Query daily transactions
+    PostgreSQL->>Lambda: Return transaction data
+    Lambda->>Service: Generate report
+    Service->>Lambda: Return formatted report
+    Lambda->>SES: Send email with report
+    SES->>Lambda: Confirm delivery
+```
+
+## User Portfolios Endpoint Implementation
+
+The User Portfolios endpoint showcases the system's simplified architecture and caching strategy:
+
+1. **Self-contained Data Management**:
+   - Uses historical purchase prices instead of external market data
+   - Maintains portfolio valuations based on internal transaction records
+   - Eliminates dependencies on external price sources
+
+2. **Resilient Architecture**:
+   - Single source of truth for pricing (transaction history)
+   - No external API failures to handle
+   - Consistent and predictable valuation calculations
+
+3. **Performance Strategy**:
+   - Optimized data access patterns
+   - Reduced complexity with single data source
+   - Stateless design for horizontal scaling
+
+This endpoint exemplifies a more reliable approach by eliminating external dependencies, with the trade-off of not showing real-time market valuations.
 
 ## Implementation Challenges and Solutions
 

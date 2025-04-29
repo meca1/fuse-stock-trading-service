@@ -245,41 +245,24 @@ export class PortfolioService {
       // Obtenemos el resumen de las acciones
       const stockSummary = await this.portfolioRepository.getPortfolioStockSummary(portfolioId);
 
-      // Obtenemos los precios actuales de las acciones en paralelo
-      const stockPromises = stockSummary.map(async (summary) => {
-        try {
-          const stockDetails = await this.stockService.getStockBySymbol(summary.symbol);
-          if (!stockDetails) {
-            console.warn(`Stock details not found for symbol: ${summary.symbol}`);
-            return null;
+      // Transformamos los datos del resumen de acciones sin necesidad de precios actuales externos
+      const stocks = stockSummary.map((summary) => {
+        // Usamos el precio de compra como precio de referencia
+        const purchasePrice = summary.total_cost / summary.quantity;
+        
+        return {
+          symbol: summary.symbol,
+          name: summary.symbol, // Usamos el símbolo como nombre ya que no tenemos el nombre real
+          quantity: Number(summary.quantity),
+          currentPrice: Number(purchasePrice.toFixed(2)), // Usamos el precio de compra como precio actual
+          profitLoss: {
+            absolute: 0, // Sin precio actual, no podemos calcular beneficio/pérdida
+            percentage: 0
           }
-
-          const averagePrice = summary.total_cost / summary.quantity;
-          const currentPrice = stockDetails.price;
-          const profitLossAbsolute = (currentPrice - averagePrice) * summary.quantity;
-          const profitLossPercentage = ((currentPrice - averagePrice) / averagePrice) * 100;
-
-          return {
-            symbol: summary.symbol,
-            name: stockDetails.name || summary.symbol,
-            quantity: Number(summary.quantity), // Ensure it's a number
-            averagePrice: Number(averagePrice.toFixed(2)),
-            currentPrice: Number(currentPrice.toFixed(2)),
-            profitLoss: {
-              absolute: Number(profitLossAbsolute.toFixed(2)),
-              percentage: Number(profitLossPercentage.toFixed(1))
-            }
-          };
-        } catch (error) {
-          console.error(`Error getting stock details for ${summary.symbol}:`, error);
-          return null;
-        }
+        };
       });
 
-      // Esperamos a que todas las promesas se resuelvan y filtramos los nulls
-      const stocks = (await Promise.all(stockPromises)).filter((stock): stock is PortfolioStock => stock !== null);
-
-      // Calculamos el valor total del portfolio
+      // Calculamos el valor total del portfolio basado en precios de compra
       const totalValue = stocks.reduce((sum, stock) => sum + (stock.currentPrice * stock.quantity), 0);
 
       // Actualizamos el valor total en la base de datos

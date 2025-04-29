@@ -37,7 +37,6 @@ export interface PortfolioStock {
   symbol: string;
   name: string;
   quantity: number;
-  averagePrice: number;
   currentPrice: number;
   profitLoss: {
     absolute: number;
