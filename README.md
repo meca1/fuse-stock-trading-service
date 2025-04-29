@@ -41,11 +41,11 @@ Before you begin, ensure you have the following installed:
 
    # Database Configuration (PostgreSQL)
    DB_HOST=localhost
-   DB_PORT=5433          # PostgreSQL puerto 5433 en Docker Compose
+   DB_PORT=5432          # PostgreSQL puerto 5432 en Docker Compose
    DB_NAME=stock_trading
    DB_USERNAME=postgres
    DB_PASSWORD=postgres
-   DATABASE_URL=postgres://postgres:postgres@localhost:5433/stock_trading?sslmode=disable
+   DATABASE_URL=postgres://postgres:postgres@localhost:5432/stock_trading?sslmode=disable
    
    # DynamoDB Configuration (para caché de tokens)
    DYNAMODB_ENDPOINT=http://localhost:8000
@@ -294,7 +294,7 @@ serverless deploy --stage prod
 ### Local Database Connection Issues
 - Ensure Docker is running and containers are up
 - Check database credentials in `.env` file
-- Verify database port is 5433 (not 5432)
+- Verify database port is 5432 (not 5432)
 
 ### Email Sending Issues
 - Check MailHog is running (`http://localhost:8025`)
@@ -310,4 +310,4 @@ serverless deploy --stage prod
 ### Resolución de Problemas Comunes
 - **Error "InvalidClientTokenId"**: Indica que está intentando usar AWS SES sin credenciales válidas. Solución: cambiar a `EMAIL_PROVIDER=smtp` en el archivo `.env`.
 - **Error "No transactions found"**: Verifica la fecha del reporte y asegúrate de que hay transacciones para esa fecha específica en UTC.
-- **Error de conexión a Base de Datos**: Asegúrate de usar el puerto 5433 para PostgreSQL, no el puerto 5432 por defecto.
+- **Error de conexión a Base de Datos**: Asegúrate de usar el puerto 5432 para PostgreSQL, no el puerto 5432 por defecto.
