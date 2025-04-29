@@ -93,7 +93,7 @@ export class DailyStockTokenService {
 
     try {
       // Get repository table name
-      const tableName = process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-dev';
+      const tableName = process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local';
       
       // Check if table exists
       const tableExists = await this.checkTableExists(tableName);

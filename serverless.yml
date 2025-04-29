@@ -74,6 +74,7 @@ provider:
 functions:
   listStocks:
     handler: src/handlers/stocks/list.handler
+    timeout: 30
     events:
       - http:
           path: /stocks
@@ -82,6 +83,7 @@ functions:
            
   getUserPortfolios:
     handler: src/handlers/portfolios/get.handler
+    timeout: 30
     events:
       - http:
           path: /users/{userId}/portfolios
