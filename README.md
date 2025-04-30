@@ -371,3 +371,63 @@ serverless deploy --stage prod
 - **"InvalidClientTokenId" Error**: Indicates that it's trying to use AWS SES without valid credentials. Solution: change to `EMAIL_PROVIDER=smtp` in the `.env` file.
 - **"No transactions found" Error**: Verify the report date and make sure there are transactions for that specific date in UTC.
 - **Database Connection Error**: Make sure to use port 5432 for PostgreSQL.
+
+## Future Improvements
+
+As a senior backend developer, with more time I would implement the following improvements to enhance the robustness, scalability, and maintainability of this service:
+
+### Architecture & Design
+
+1. **Enhance Serverless Function Organization**: Further refine the Lambda function organization by implementing a more granular function-per-business-capability approach, optimizing for both cold start performance and separation of concerns.
+
+2. **Serverless Event-Driven Architecture**: Leverage more AWS serverless event sources (SQS, EventBridge) to build a truly event-driven architecture that can scale independently for different workloads.
+
+3. **Event Sourcing**: Implement event sourcing for critical operations like stock purchases to maintain a complete audit trail and enable easier recovery from failures, using DynamoDB streams or Kinesis.
+
+### Performance & Scalability
+
+4. **Advanced DynamoDB Caching**: Enhance the existing DynamoDB-based caching with DAX (DynamoDB Accelerator) for even faster read performance, implement more granular TTL strategies, and add cache warming mechanisms for frequently accessed data.
+
+5. **Database Optimization**: Add database indexes, implement query optimization, and consider read replicas for scaling read operations.
+
+6. **Serverless Optimization**: Optimize Lambda cold starts with provisioned concurrency for critical endpoints and implement better connection pooling for database access.
+
+### Reliability & Resilience
+
+7. **Circuit Breaker Pattern**: Implement circuit breakers for external API calls to prevent cascading failures when the vendor API is experiencing issues.
+
+8. **Retry Mechanisms**: Add sophisticated retry logic with exponential backoff for transient failures in external service calls.
+
+9. **Dead Letter Queues**: Implement DLQs for failed asynchronous operations to ensure no transactions are lost.
+
+### Security
+
+10. **Enhanced Authentication**: Replace simple API key authentication with JWT or OAuth2 for more granular access control.
+
+11. **Secrets Management**: Move sensitive configuration to AWS Secrets Manager instead of environment variables.
+
+12. **Input Validation**: Strengthen input validation beyond Zod schemas, implementing more comprehensive business rule validations.
+
+### Developer Experience
+
+13. **API Documentation**: Generate comprehensive API documentation using OpenAPI/Swagger.
+
+14. **Improved Logging**: Implement structured logging with correlation IDs across service boundaries for better traceability.
+
+15. **Monitoring & Alerting**: Set up comprehensive monitoring with CloudWatch dashboards, custom metrics, and automated alerts.
+
+### Testing
+
+16. **Integration Tests**: Add more comprehensive integration tests covering end-to-end flows.
+
+17. **Load Testing**: Implement load testing scenarios to verify performance under high load.
+
+18. **Chaos Testing**: Introduce controlled failures to verify system resilience.
+
+### CI/CD
+
+19. **Enhanced CI/CD Pipeline**: Implement a more sophisticated CI/CD pipeline with staging environments, canary deployments, and automated rollbacks.
+
+20. **Infrastructure as Code**: Move all infrastructure configuration to CloudFormation or Terraform for better consistency and version control.
+
+These improvements would significantly enhance the service's quality, maintainability, and scalability while reducing operational risks.
