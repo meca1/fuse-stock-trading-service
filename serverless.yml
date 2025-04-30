@@ -37,7 +37,7 @@ custom:
     dbPassword: ${self:provider.environment.DB_PASSWORD}
     dbInstanceClass: db.t3.micro
     allocatedStorage: 20
-    engineVersion: '13.7'
+    engineVersion: '13.18'
     port: ${self:provider.environment.DB_PORT}
   stockTokensTable: fuse-stock-tokens-${self:provider.stage}
   stockCacheTable: fuse-stock-cache-${self:provider.stage}
@@ -109,7 +109,7 @@ functions:
 
   updateStockTokens:
     handler: src/handlers/cron/update-stock-tokens.handler
-    timeout: 300 # 5 minutos
+    timeout: 30 
     memorySize: 256
     events:
       - schedule:
@@ -128,7 +128,7 @@ functions:
 
   dailyReport:
     handler: src/handlers/cron/daily-report.handler
-    timeout: 300 # 5 minutos
+    timeout: 30
     memorySize: 512 # Más memoria para procesar reportes grandes
     events:
       - schedule:
@@ -151,4 +151,8 @@ functions:
       SMTP_PASSWORD: ${env:SMTP_PASSWORD, ''}
 
 # AWS CloudFormation resources definition
-resources: ${file(./resources/rds.yml)}
+resources: 
+  - ${file(./resources/rds.yml)}
+  - ${file(./resources/dynamodb-tables.yml)}
+
+
