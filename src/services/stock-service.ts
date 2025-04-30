@@ -123,10 +123,13 @@ export class StockService {
 
   /**
    * Verifica si el precio está dentro del 2% del precio actual
+   * Usa una pequeña tolerancia para manejar problemas de precisión de punto flotante
    */
   public isValidPrice(currentPrice: number, requestedPrice: number): boolean {
-    const priceDiff = Math.abs(requestedPrice - currentPrice);
-    const maxDiff = currentPrice * 0.02;
+    // Round to 10 decimal places to avoid floating-point precision issues
+    const priceDiff = Number((Math.abs(requestedPrice - currentPrice)).toFixed(10));
+    const maxDiff = Number((currentPrice * 0.02).toFixed(10));
+    console.log(`Price validation: diff=${priceDiff}, maxAllowed=${maxDiff}, isValid=${priceDiff <= maxDiff}`);
     return priceDiff <= maxDiff;
   }
 
