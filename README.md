@@ -295,9 +295,21 @@ npm run test:coverage
 
 ### Configure AWS Credentials
 
+Make sure you have your AWS credentials configured:
+
 ```bash
 aws configure
 ```
+
+### AWS Profile Configuration
+
+For deployment, it's necessary to configure the `AWS_PROFILE` variable in the `.env` file:
+
+```bash
+AWS_PROFILE=default
+```
+
+This variable indicates which AWS profile will be used for deployment. If you have multiple profiles configured, make sure to specify the correct one.
 
 ### Deploy to Development Environment
 
