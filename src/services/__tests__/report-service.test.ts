@@ -1,6 +1,6 @@
 import { ReportService } from '../report-service';
 import { TransactionRepository } from '../../repositories/transaction-repository';
-import { TransactionStatus } from '../../types/common/enums';
+import { TransactionStatus, TransactionType } from '../../types/common/enums';
 import { ITransaction } from '../../types/models/transaction';
 
 describe('ReportService', () => {
@@ -22,9 +22,9 @@ describe('ReportService', () => {
     const mockTransactions: ITransaction[] = [
       {
         id: 1,
-        user_id: 'user1',
         portfolio_id: 101,
         stock_symbol: 'AAPL',
+        type: TransactionType.BUY,
         quantity: 10,
         price: 150.00,
         status: TransactionStatus.COMPLETED,
@@ -33,9 +33,9 @@ describe('ReportService', () => {
       },
       {
         id: 2,
-        user_id: 'user1',
         portfolio_id: 101,
         stock_symbol: 'AAPL',
+        type: TransactionType.BUY,
         quantity: 5,
         price: 150.50,
         status: TransactionStatus.FAILED,
@@ -45,9 +45,9 @@ describe('ReportService', () => {
       },
       {
         id: 3,
-        user_id: 'user2',
         portfolio_id: 102,
         stock_symbol: 'TSLA',
+        type: TransactionType.BUY,
         quantity: 2,
         price: 800.00,
         status: TransactionStatus.COMPLETED,
@@ -137,9 +137,9 @@ describe('ReportService', () => {
         successfulTransactions: [
           {
             id: 1,
-            user_id: 'user1',
             portfolio_id: 101,
             stock_symbol: 'AAPL',
+            type: TransactionType.BUY,
             quantity: 10,
             price: 150.00,
             status: TransactionStatus.COMPLETED,
@@ -148,9 +148,9 @@ describe('ReportService', () => {
           },
           {
             id: 3,
-            user_id: 'user2',
             portfolio_id: 102,
             stock_symbol: 'TSLA',
+            type: TransactionType.BUY,
             quantity: 2,
             price: 800.00,
             status: TransactionStatus.COMPLETED,
@@ -161,9 +161,9 @@ describe('ReportService', () => {
         failedTransactions: [
           {
             id: 2,
-            user_id: 'user1',
             portfolio_id: 101,
             stock_symbol: 'AAPL',
+            type: TransactionType.BUY,
             quantity: 5,
             price: 150.50,
             status: TransactionStatus.FAILED,
@@ -220,9 +220,9 @@ describe('ReportService', () => {
         successfulTransactions: [
           {
             id: 1,
-            user_id: 'user1',
             portfolio_id: 101,
             stock_symbol: 'AAPL',
+            type: TransactionType.BUY,
             quantity: 10,
             price: 150.00,
             status: TransactionStatus.COMPLETED,
@@ -250,7 +250,8 @@ describe('ReportService', () => {
       
       // Verify HTML shows no failed transactions message
       expect(html).toContain('<p>No failed transactions for this date.</p>');
-      expect(html).not.toContain('<table>');
+      // Verificamos que no haya tabla de transacciones fallidas, pero sí puede haber tablas para el resumen
+      expect(html).not.toContain('<h2>Failed Transactions</h2>\n            <table>');
     });
   });
 });

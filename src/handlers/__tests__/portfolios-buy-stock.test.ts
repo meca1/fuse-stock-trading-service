@@ -39,6 +39,12 @@ jest.mock('../../types/schemas/handlers', () => ({
       success: true,
       data: { userId: '123', quantity: 10, price: 150 }
     })
+  },
+  apiKeySchema: {
+    safeParse: jest.fn().mockReturnValue({
+      success: true,
+      data: 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+    })
   }
 }));
 
@@ -139,6 +145,9 @@ describe('Buy Stock Handler', () => {
     // Create a mock event with valid path parameters and body
     const mockEvent = {
       pathParameters: { symbol: 'AAPL' },
+      headers: {
+        'x-api-key': process.env.VENDOR_API_KEY || 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+      },
       body: JSON.stringify({
         userId: '123',
         quantity: 10,
@@ -196,6 +205,9 @@ describe('Buy Stock Handler', () => {
     // Create a mock event
     const mockEvent = {
       pathParameters: { symbol: 'AAPL' },
+      headers: {
+        'x-api-key': process.env.VENDOR_API_KEY || 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+      },
       body: JSON.stringify({
         userId: '123',
         quantity: 10,
@@ -223,6 +235,9 @@ describe('Buy Stock Handler', () => {
     // Create a mock event
     const mockEvent = {
       pathParameters: { symbol: 'INVALID' },
+      headers: {
+        'x-api-key': process.env.VENDOR_API_KEY || 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+      },
       body: JSON.stringify({
         userId: '123',
         quantity: 10,
@@ -255,6 +270,9 @@ describe('Buy Stock Handler', () => {
     // Create a mock event
     const mockEvent = {
       pathParameters: { symbol: 'AAPL' },
+      headers: {
+        'x-api-key': process.env.VENDOR_API_KEY || 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+      },
       body: JSON.stringify({
         userId: '123',
         quantity: 10,
@@ -287,6 +305,9 @@ describe('Buy Stock Handler', () => {
     // Create a mock event
     const mockEvent = {
       pathParameters: { symbol: 'AAPL' },
+      headers: {
+        'x-api-key': process.env.VENDOR_API_KEY || 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+      },
       body: JSON.stringify({
         userId: 'invalid-user',
         quantity: 10,

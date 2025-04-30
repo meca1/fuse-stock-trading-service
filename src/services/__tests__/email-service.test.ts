@@ -121,9 +121,11 @@ describe('EmailService', () => {
     it('should throw error when no email provider is initialized', async () => {
       // Create a service with both providers null
       emailService = new EmailService();
+      // Forzar ambos proveedores a null después de la inicialización
       emailService['ses'] = null;
       emailService['transporter'] = null;
       
+      // Verificar que se lanza el error cuando ambos proveedores son null
       await expect(emailService.sendReportEmail({
         recipients: ['user@example.com'],
         subject: 'Test Report',

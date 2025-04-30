@@ -14,7 +14,13 @@ jest.mock('../../repositories/vendor-api-repository');
 jest.mock('../../services/daily-stock-token-service');
 jest.mock('../../types/schemas/handlers', () => ({
   updateStockTokensEventSchema: {
-    parse: jest.fn()
+    parse: jest.fn().mockImplementation(event => event)
+  },
+  apiKeySchema: {
+    safeParse: jest.fn().mockReturnValue({
+      success: true,
+      data: 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+    })
   }
 }));
 

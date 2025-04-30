@@ -27,10 +27,21 @@ describe('VendorApiClient', () => {
 
   describe('buyStock', () => {
     it('should return buy response', async () => {
-      repo.buyStock.mockResolvedValue({ data: { transactionId: 't1' } });
+      repo.buyStock.mockResolvedValue({ 
+        status: 200, 
+        message: 'Success',
+        data: { 
+          order: { 
+            symbol: 'AAPL', 
+            price: 100, 
+            quantity: 1, 
+            total: 100 
+          } 
+        } 
+      });
       const result = await client.buyStock('AAPL', { price: 100, quantity: 1 });
-      expect(result.data.transactionId).toBe('t1');
-      expect(repo.buyStock).toHaveBeenCalledWith('AAPL', { portfolioId: 1, symbol: 'AAPL', price: 100, quantity: 1 });
+      expect(result.data?.order?.symbol).toBe('AAPL');
+      expect(repo.buyStock).toHaveBeenCalledWith('AAPL', { price: 100, quantity: 1 });
     });
     it('should throw if repo fails', async () => {
       repo.buyStock.mockRejectedValue(new Error('fail'));

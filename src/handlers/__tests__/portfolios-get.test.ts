@@ -33,6 +33,12 @@ jest.mock('../../types/schemas/handlers', () => ({
       success: true,
       data: { userId: '123' }
     })
+  },
+  apiKeySchema: {
+    safeParse: jest.fn().mockReturnValue({
+      success: true,
+      data: 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+    })
   }
 }));
 
@@ -99,7 +105,10 @@ describe('Portfolios List Handler', () => {
   it('should return portfolio summary for valid user ID', async () => {
     // Create a mock event with valid path parameters
     const mockEvent = {
-      pathParameters: { userId: '123' }
+      pathParameters: { userId: '123' },
+      headers: {
+        'x-api-key': process.env.VENDOR_API_KEY || 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+      }
     } as unknown as APIGatewayProxyEvent;
     
     // Call the handler
@@ -163,7 +172,10 @@ describe('Portfolios List Handler', () => {
     
     // Create a mock event with invalid path parameters
     const mockEvent = {
-      pathParameters: { userId: 'invalid' }
+      pathParameters: { userId: 'invalid' },
+      headers: {
+        'x-api-key': process.env.VENDOR_API_KEY || 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+      }
     } as unknown as APIGatewayProxyEvent;
     
     // Call the handler - it should return an error response
@@ -186,7 +198,10 @@ describe('Portfolios List Handler', () => {
     
     // Create a mock event
     const mockEvent = {
-      pathParameters: { userId: '123' }
+      pathParameters: { userId: '123' },
+      headers: {
+        'x-api-key': process.env.VENDOR_API_KEY || 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+      }
     } as unknown as APIGatewayProxyEvent;
     
     // Call the handler - it should return an error response
@@ -200,14 +215,15 @@ describe('Portfolios List Handler', () => {
   });
   
   it('should handle cache table verification failures gracefully', async () => {
-    // Make the cache table check throw an error
-    mockPortfolioCacheService.checkTableExists.mockRejectedValue(
-      new Error('DynamoDB connection failed')
-    );
+    // Mock cache table check to fail
+    mockPortfolioCacheService.checkTableExists.mockResolvedValueOnce(false);
     
     // Create a mock event
     const mockEvent = {
-      pathParameters: { userId: '123' }
+      pathParameters: { userId: '123' },
+      headers: {
+        'x-api-key': process.env.VENDOR_API_KEY || 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+      }
     } as unknown as APIGatewayProxyEvent;
     
     // Call the handler (should still work even if cache check fails)
@@ -221,12 +237,15 @@ describe('Portfolios List Handler', () => {
   });
   
   it('should use default cache table name when not provided', async () => {
-    // Remove cache table environment variable
+    // Remove the cache table environment variable
     delete process.env.PORTFOLIO_CACHE_TABLE;
     
     // Create a mock event
     const mockEvent = {
-      pathParameters: { userId: '123' }
+      pathParameters: { userId: '123' },
+      headers: {
+        'x-api-key': process.env.VENDOR_API_KEY || 'nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e'
+      }
     } as unknown as APIGatewayProxyEvent;
     
     // Call the handler

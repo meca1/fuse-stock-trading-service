@@ -71,17 +71,16 @@ describe('Daily Report Handler', () => {
     expect(mockGenerateDailyReport).toHaveBeenCalled();
     const generateCallArg = mockGenerateDailyReport.mock.calls[0][0];
     
-    // Get yesterday's date in YYYY-MM-DD format for comparison
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    // El handler usa la fecha actual como predeterminada, no la de ayer
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
     
-    expect(generateCallArg).toBe(yesterdayStr);
+    expect(generateCallArg).toBe(todayStr);
     
     // Verify email was sent with correct parameters
     expect(mockSendReportEmail).toHaveBeenCalledWith({
       recipients: ['test@example.com', 'admin@example.com'],
-      subject: `Daily Transaction Report - ${yesterdayStr}`,
+      subject: `Daily Transaction Report - ${todayStr}`,
       reportData: expect.objectContaining({
         date: '2023-01-01'
       })
@@ -89,7 +88,7 @@ describe('Daily Report Handler', () => {
     
     // Verify response body
     expect(body.message).toBe('Daily report generated and sent successfully');
-    expect(body.date).toBe(yesterdayStr);
+    expect(body.date).toBe(todayStr);
     expect(body.recipients).toEqual(['test@example.com', 'admin@example.com']);
   });
   

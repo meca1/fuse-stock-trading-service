@@ -20,7 +20,11 @@ describe('PortfolioService', () => {
     portfolioRepository = { findById: jest.fn(), findByUserId: jest.fn(), create: jest.fn(), getPortfolioStockSummary: jest.fn(), updateValueAndTimestamp: jest.fn() } as any;
     transactionRepository = { create: jest.fn() } as any;
     userRepository = { findById: jest.fn() } as any;
-    stockService = { getStockBySymbol: jest.fn(), isValidPrice: jest.fn() } as any;
+    stockService = { 
+      getStockBySymbol: jest.fn(), 
+      isValidPrice: jest.fn(),
+      buyStock: jest.fn().mockResolvedValue({ status: 200, message: 'Success', data: { order: { transactionId: 'tx123' } } })
+    } as any;
     
     // Mock cache service
     cacheService = {
