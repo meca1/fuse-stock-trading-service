@@ -131,6 +131,7 @@ curl -X POST "http://localhost:3000/dev/update-stock-tokens" \
 ```bash
 # Direct serverless invocation:
 serverless invoke local --function updateStockTokens --data '{}' --stage local
+
 ```
 
 When successful, the lambda will fetch stock data from the vendor API and store tokens in DynamoDB for efficient pagination and caching. Without this initialization, stock listing and purchase endpoints may not work correctly.
@@ -163,23 +164,41 @@ VENDOR_API_KEY=nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e
 
 Without a valid API key, all requests will be rejected with a 401 Unauthorized error.
 
-Use curl, Postman, or any HTTP client to test the endpoints:
+### Postman Collection
+
+To facilitate testing, you can import the following Postman collection that includes all endpoints correctly configured:
+
+```plaintext
+https://api.postman.com/collections/42445248-45a26c8e-a01c-4e76-8490-cbb7b35bc4ba?access_key=PMAT-01JSZ7WJSBZBYEHGZ1Q9GXYE4S
+```
+
+To import the collection in Postman:
+
+1. Open Postman
+2. Click on "Import" in the upper left corner
+3. Select the "Link" tab
+4. Paste the URL above
+5. Click on "Import"
+
+All endpoints in the collection already have the correct API key configured.
+
+Alternatively, you can use curl or another HTTP client to test the endpoints manually:
 
 ### List Stocks
 ```bash
-curl -X GET "http://localhost:3000/dev/stocks" \
+curl -X GET "http://localhost:3000/local/stocks" \
   -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
 ```
 
 ### Get User Portfolios
 ```bash
-curl -X GET "http://localhost:3000/dev/users/123/portfolios" \
+curl -X GET "http://localhost:3000/local/users/1/portfolios" \
   -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
 ```
 
 ### Buy Stock
 ```bash
-curl -X POST "http://localhost:3000/dev/stocks/AAPL/buy" \
+curl -X POST "http://localhost:3000/local/stocks/AAPL/buy" \
   -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e" \
   -H "Content-Type: application/json" \
   -d '{"portfolioId": "1", "quantity": 10, "price": 150.50}'
