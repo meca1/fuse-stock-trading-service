@@ -201,7 +201,7 @@ curl -X GET "http://localhost:3000/local/users/1/portfolios" \
 curl -X POST "http://localhost:3000/local/stocks/AAPL/buy" \
   -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e" \
   -H "Content-Type: application/json" \
-  -d '{"portfolioId": "1", "quantity": 10, "price": 150.50}'
+  -d '{"portfolioId": "1", "quantity": 10, "price": 150.50, "userId": "1"}'
 ```
 
 ## Daily Reports
@@ -213,14 +213,14 @@ The service includes a feature to generate daily transaction reports and send th
 To generate a report for the CURRENT date (default):
 
 ```bash
-curl -X POST "http://localhost:3000/dev/generate-report" \
+curl -X POST "http://localhost:3000/local/generate-report" \
   -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
 ```
 
 To generate a report for a specific date:
 
 ```bash
-curl -X POST "http://localhost:3000/dev/generate-report?date=2025-04-28" \
+curl -X POST "http://localhost:3000/local/generate-report?date=2025-04-28" \
   -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
 ```
 
