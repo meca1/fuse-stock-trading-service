@@ -1,8 +1,8 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { PortfolioService } from '../../services/portfolio-service';
-import { AppError } from '../../utils/errors/app-error';
+import { AppError, AuthenticationError } from '../../utils/errors/app-error';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
-import { listPortfoliosParamsSchema } from '../../types/schemas/handlers';
+import { listPortfoliosParamsSchema, apiKeySchema } from '../../types/schemas/handlers';
 import { handleZodError } from '../../middleware/zod-error-handler';
 import { PortfolioRepository } from '../../repositories/portfolio-repository';
 import { TransactionRepository } from '../../repositories/transaction-repository';
@@ -41,6 +41,26 @@ const getStockServiceInstance = () => {
  * Handler to get the portfolio summary for a user
  */
 const getPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  console.log('Get portfolios handler started', { 
+    pathParams: event.pathParameters,
+    headers: {
+      'x-api-key-exists': !!event.headers['x-api-key'],
+      'X-API-Key-exists': !!event.headers['X-API-Key']
+    }
+  });
+
+  // 1. Validate API key
+  const apiKey = event.headers['x-api-key'] || event.headers['X-API-Key'];
+  const apiKeyResult = apiKeySchema.safeParse(apiKey);
+  
+  if (!apiKeyResult.success) {
+    throw handleZodError(apiKeyResult.error);
+  }
+
+  if (apiKey !== process.env.VENDOR_API_KEY) {
+    throw new AuthenticationError('Invalid API key');
+  }
+  
   // Log all environment variables related to DynamoDB for debugging
   console.log('DynamoDB Configuration', {
     region: process.env.DYNAMODB_REGION || 'N/A',

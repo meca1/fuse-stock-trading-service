@@ -1,18 +1,39 @@
 import { Handler } from 'aws-lambda';
 import { DailyStockTokenService } from '../../services/daily-stock-token-service';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
-import { AppError } from '../../utils/errors/app-error';
-import { updateStockTokensEventSchema } from '../../types/schemas/handlers';
+import { AppError, AuthenticationError } from '../../utils/errors/app-error';
+import { updateStockTokensEventSchema, apiKeySchema } from '../../types/schemas/handlers';
 import { DynamoDB } from 'aws-sdk';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
 import { VendorApiRepository } from '../../repositories/vendor-api-repository';
+import { handleZodError } from '../../middleware/zod-error-handler';
 
 const updateStockTokensHandler: Handler = async (event, context) => {
-  console.log('Starting daily stock token update lambda', { event });
+  console.log('Starting daily stock token update lambda', { 
+    event,
+    headers: event.headers ? {
+      'x-api-key-exists': !!event.headers['x-api-key'],
+      'X-API-Key-exists': !!event.headers['X-API-Key']
+    } : 'No headers'
+  });
   
   // Validate event structure
   updateStockTokensEventSchema.parse(event);
+  
+  // Validate API key if this is an API Gateway event
+  if (event.headers) {
+    const apiKey = event.headers['x-api-key'] || event.headers['X-API-Key'];
+    const apiKeyResult = apiKeySchema.safeParse(apiKey);
+    
+    if (!apiKeyResult.success) {
+      throw handleZodError(apiKeyResult.error);
+    }
+
+    if (apiKey !== process.env.VENDOR_API_KEY) {
+      throw new AuthenticationError('Invalid API key');
+    }
+  }
   
   const dynamoDb = new DynamoDB.DocumentClient({
     region: process.env.DYNAMODB_REGION || 'us-east-1',

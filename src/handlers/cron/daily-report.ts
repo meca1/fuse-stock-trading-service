@@ -5,13 +5,35 @@ import { ReportService } from '../../services/report-service';
 import { EmailService } from '../../services/email-service';
 import { IReportService, IEmailService } from '../../services/service-types';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
+import { AppError, AuthenticationError } from '../../utils/errors/app-error';
+import { apiKeySchema } from '../../types/schemas/handlers';
+import { handleZodError } from '../../middleware/zod-error-handler';
 
 /**
  * Handler to generate and send daily transaction reports
  */
 const dailyReportHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const startTime = Date.now();
-  console.log('Starting daily report generation...');
+  console.log('Starting daily report generation...', {
+    headers: event.headers ? {
+      'x-api-key-exists': !!event.headers['x-api-key'],
+      'X-API-Key-exists': !!event.headers['X-API-Key']
+    } : 'No headers'
+  });
+  
+  // Validate API key if this is an API Gateway event
+  if (event.headers) {
+    const apiKey = event.headers['x-api-key'] || event.headers['X-API-Key'];
+    const apiKeyResult = apiKeySchema.safeParse(apiKey);
+    
+    if (!apiKeyResult.success) {
+      throw handleZodError(apiKeyResult.error);
+    }
+
+    if (apiKey !== process.env.VENDOR_API_KEY) {
+      throw new AuthenticationError('Invalid API key');
+    }
+  }
 
   try {
     // Initialize services

@@ -123,7 +123,7 @@ export class StockService {
 
   /**
    * Verifica si el precio está dentro del 2% del precio actual
-   * Usa una pequeña tolerancia para manejar problemas de precisión de punto flotante
+   * Uses toFixed(10) to handle floating-point precision issues
    */
   public isValidPrice(currentPrice: number, requestedPrice: number): boolean {
     // Round to 10 decimal places to avoid floating-point precision issues

@@ -7,8 +7,8 @@ import { StockService } from '../../services/stock-service';
 import { IPortfolio } from '../../types/models/portfolio';
 import { DatabaseService } from '../../config/database';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
-import { AppError, ValidationError, NotFoundError, BusinessError } from '../../utils/errors/app-error';
-import { buyStockParamsSchema, buyStockBodySchema } from '../../types/schemas/handlers';
+import { AppError, ValidationError, NotFoundError, BusinessError, AuthenticationError } from '../../utils/errors/app-error';
+import { buyStockParamsSchema, buyStockBodySchema, apiKeySchema } from '../../types/schemas/handlers';
 import { handleZodError } from '../../middleware/zod-error-handler';
 import { DynamoDB } from 'aws-sdk';
 import { PortfolioCacheService } from '../../services/portfolio-cache-service';
@@ -58,8 +58,24 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
   
   console.log('Buy stock handler started', { 
     pathParams: event.pathParameters,
-    bodyExists: !!event.body
+    bodyExists: !!event.body,
+    headers: {
+      'x-api-key-exists': !!event.headers['x-api-key'],
+      'X-API-Key-exists': !!event.headers['X-API-Key']
+    }
   });
+
+  // 1. Validate API key
+  const apiKey = event.headers['x-api-key'] || event.headers['X-API-Key'];
+  const apiKeyResult = apiKeySchema.safeParse(apiKey);
+  
+  if (!apiKeyResult.success) {
+    throw handleZodError(apiKeyResult.error);
+  }
+
+  if (apiKey !== process.env.VENDOR_API_KEY) {
+    throw new AuthenticationError('Invalid API key');
+  }
 
   // Obtener y validar parámetros en paralelo con la inicialización de servicios
   const paramsPromise = validateParams(event);
