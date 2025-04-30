@@ -125,8 +125,10 @@ Alternative methods:
 ```bash
 # HTTP endpoint (when server is running):
 curl -X POST "http://localhost:3000/dev/update-stock-tokens" \
-  -H "x-api-key: your_api_key_here"
+  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
+```
 
+```bash
 # Direct serverless invocation:
 serverless invoke local --function updateStockTokens --data '{}' --stage local
 ```
@@ -149,24 +151,36 @@ The service will now be running at `http://localhost:3000`.
 
 > **IMPORTANT**: Make sure you've initialized the stock tokens by running the `update-stock-tokens` endpoint as mentioned in step 3 before testing these endpoints.
 
+### API Authentication
+
+All endpoints require authentication using an API key. You must include the API key in the `x-api-key` header with every request.
+
+The API key to use is:
+
+```plaintext
+VENDOR_API_KEY=nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e
+```
+
+Without a valid API key, all requests will be rejected with a 401 Unauthorized error.
+
 Use curl, Postman, or any HTTP client to test the endpoints:
 
 ### List Stocks
 ```bash
 curl -X GET "http://localhost:3000/dev/stocks" \
-  -H "x-api-key: your_api_key_here"
+  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
 ```
 
 ### Get User Portfolios
 ```bash
 curl -X GET "http://localhost:3000/dev/users/123/portfolios" \
-  -H "x-api-key: your_api_key_here"
+  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
 ```
 
 ### Buy Stock
 ```bash
 curl -X POST "http://localhost:3000/dev/stocks/AAPL/buy" \
-  -H "x-api-key: your_api_key_here" \
+  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e" \
   -H "Content-Type: application/json" \
   -d '{"portfolioId": "1", "quantity": 10, "price": 150.50}'
 ```
@@ -180,13 +194,15 @@ The service includes a feature to generate daily transaction reports and send th
 To generate a report for the CURRENT date (default):
 
 ```bash
-curl -X POST "http://localhost:3000/dev/generate-report"
+curl -X POST "http://localhost:3000/dev/generate-report" \
+  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
 ```
 
 To generate a report for a specific date:
 
 ```bash
-curl -X POST "http://localhost:3000/dev/generate-report?date=2025-04-28"
+curl -X POST "http://localhost:3000/dev/generate-report?date=2025-04-28" \
+  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
 ```
 
 You can also use the provided scripts:
