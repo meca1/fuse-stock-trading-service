@@ -16,8 +16,6 @@ import { PortfolioCacheService } from '../../services/portfolio-cache-service';
 
 // We need to manually define service factory to fix the module not found error
 const getStockServiceInstance = (): StockService => {
-  const { DynamoDB } = require('aws-sdk');
-  
   // Crear una sola instancia del cliente DynamoDB para toda la función
   const dynamoConfig = {
     region: process.env.DYNAMODB_REGION || 'us-east-1',
@@ -28,7 +26,11 @@ const getStockServiceInstance = (): StockService => {
     endpoint: process.env.DYNAMODB_ENDPOINT
   };
   
-  const dynamoDb = DynamoDBDocument.from(new DynamoDB(dynamoConfig));
+  const dynamoDb = DynamoDBDocument.from(new DynamoDB(dynamoConfig), {
+    marshallOptions: {
+      removeUndefinedValues: true
+    }
+  });
   
   // Import these inline to avoid circular dependencies
   const { StockTokenRepository } = require('../../repositories/stock-token-repository');

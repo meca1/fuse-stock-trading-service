@@ -1,6 +1,7 @@
 import { VendorApiClient } from './vendor/api-client';
 import { StockTokenRepository } from '../repositories/stock-token-repository';
 import { DynamoDB } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 
 export class DailyStockTokenService {
   private isRunning = false;
@@ -13,12 +14,10 @@ export class DailyStockTokenService {
     // Initialize DynamoDB client for verifications
     this.dynamoDb = new DynamoDB({
       region: process.env.DYNAMODB_REGION || 'us-east-1',
-
       credentials: {
         accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
         secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
       },
-
       endpoint: process.env.DYNAMODB_ENDPOINT
     });
   }

@@ -19,9 +19,7 @@ export class StockTokenRepository {
       };
       
       console.log(`Searching for token for ${symbol} in table ${this.tableName}...`);
-      const result = await // The `.promise()` call might be on an JS SDK v2 client API.
-      // If yes, please remove .promise(). If not, remove this comment.
-      this.dynamoDb.get(params).promise();
+      const result = await this.dynamoDb.get(params);
       
       if (result.Item && 'nextToken' in result.Item) {
         console.log(`Token found for ${symbol}: ${result.Item.nextToken}`);
@@ -55,9 +53,7 @@ export class StockTokenRepository {
       };
       
       console.log(`Saving token for ${symbol} in table ${this.tableName}: ${nextToken}`);
-      await // The `.promise()` call might be on an JS SDK v2 client API.
-      // If yes, please remove .promise(). If not, remove this comment.
-      this.dynamoDb.put(params).promise();
+      await this.dynamoDb.put(params);
       console.log(`Token successfully saved for ${symbol} at ${timestamp}`);
     } catch (error) {
       console.error(`Error saving token for ${symbol} in DynamoDB:`, error);
