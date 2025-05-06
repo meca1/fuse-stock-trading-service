@@ -1,7 +1,8 @@
-import { TransactionRepository } from '../repositories/transaction-repository';
-import { ITransaction } from '../types/models/transaction';
+import { ITransaction } from './transaction';
 
-// Tipos para ReportService
+/**
+ * Data structure for daily reports
+ */
 export interface ReportData {
   date: string;
   totalTransactions: number;
@@ -22,18 +23,10 @@ export interface ReportData {
   };
 }
 
+/**
+ * Interface for the report service
+ */
 export interface IReportService {
   generateDailyReport(date: string): Promise<ReportData>;
   formatReportAsHtml(reportData: ReportData): string;
-}
-
-// Tipos para EmailService
-export interface EmailParams {
-  recipients: string[];
-  subject: string;
-  reportData: ReportData;
-}
-
-export interface IEmailService {
-  sendReportEmail(params: EmailParams): Promise<void>;
 } 
