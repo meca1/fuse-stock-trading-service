@@ -93,7 +93,11 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
     endpoint: process.env.DYNAMODB_ENDPOINT
   };
   
-  const dynamoDb = DynamoDBDocument.from(new DynamoDB(dynamoConfig));
+  const dynamoDb = DynamoDBDocument.from(new DynamoDB(dynamoConfig), {
+    marshallOptions: {
+      removeUndefinedValues: true
+    }
+  });
   const stockService = getStockServiceInstance();
   
   // Inicializar database service en paralelo con la validación
