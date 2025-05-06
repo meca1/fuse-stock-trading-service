@@ -60,4 +60,35 @@ export interface PortfolioSummaryResponse {
       percentage: number;
     };
   }[];
+}
+
+/**
+ * Interface for cached portfolio summary data
+ */
+export interface CachedPortfolioSummary {
+  data: PortfolioSummaryResponse;
+  timestamp: string;
+}
+
+/**
+ * Interface for cached user portfolio summary data
+ */
+export interface CachedUserPortfolioSummary {
+  data: {
+    userId: string;
+    totalValue: number;
+    currency: string;
+    lastUpdated: string;
+    stocks: {
+      symbol: string;
+      name: string;
+      quantity: number;
+      currentPrice: number;
+      profitLoss: {
+        absolute: number;
+        percentage: number;
+      };
+    }[];
+  };
+  timestamp: string;
 } 

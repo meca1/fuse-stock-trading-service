@@ -12,7 +12,6 @@ import { buyStockParamsSchema, buyStockBodySchema, apiKeySchema } from '../../ty
 import { handleZodError } from '../../middleware/zod-error-handler';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 import { DynamoDB } from '@aws-sdk/client-dynamodb';
-import { PortfolioCacheService } from '../../services/portfolio-cache-service';
 
 // We need to manually define service factory to fix the module not found error
 const getStockServiceInstance = (): StockService => {
@@ -207,18 +206,14 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
       } as Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>);
     }
 
-    // Inicializar servicio de portfolio con cache
-    const portfolioCacheService = new PortfolioCacheService(
-      dynamoDb,
-      process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local'
-    );
-    
+    // Inicializar servicio de portfolio con caché integrada
     const portfolioService = new PortfolioService(
       portfolioRepository,
       transactionRepository,
       userRepository,
       stockService,
-      portfolioCacheService
+      dynamoDb,
+      process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local'
     );
     
     // Resolver el portfolio (esperar creación si fue necesario)

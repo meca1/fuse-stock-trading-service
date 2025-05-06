@@ -14,7 +14,6 @@ import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
 import { VendorApiRepository } from '../../repositories/vendor-api-repository';
-import { PortfolioCacheService } from '../../services/portfolio-cache-service';
 
 // We need to manually define service factory to fix the module not found error
 const getStockServiceInstance = () => {
@@ -91,7 +90,7 @@ const getPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGat
   const transactionRepository = new TransactionRepository(dbService);
   const userRepository = new UserRepository(dbService);
   
-  // Setup DynamoDB for cache service
+  // Setup DynamoDB for cache
   const dynamoDb = DynamoDBDocument.from(new DynamoDB({
     region: process.env.DYNAMODB_REGION || 'us-east-1',
     credentials: {
@@ -105,34 +104,20 @@ const getPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGat
     }
   });
   
-  // Create the cache service
-  const portfolioCacheService = new PortfolioCacheService(
-    dynamoDb, 
-    process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local'
-  );
-  
-  // Check if the cache table exists
-  try {
-    const tableExists = await portfolioCacheService.checkTableExists();
-    console.log(`Portfolio cache table check result: ${tableExists ? 'Table exists' : 'Table does not exist'}`);
-  } catch (error) {
-    console.error('Error checking if portfolio cache table exists:', error);
-    // We'll continue anyway, the cache service will disable itself if needed
-  }
-  
   // Get the optimized stock service
   const stockService = getStockServiceInstance();
   
-  // Create portfolio service with cache
+  // Create portfolio service with integrated cache
   const portfolioService = new PortfolioService(
     portfolioRepository,
     transactionRepository,
     userRepository,
     stockService,
-    portfolioCacheService
+    dynamoDb,
+    process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local'
   );
   
-  // Get portfolio summary (now uses cache)
+  // Get portfolio summary (now uses integrated cache)
   console.log(`Requesting portfolio summary for user: ${userId}`);
   const summary = await portfolioService.getUserPortfolioSummary(userId);
 

@@ -7,7 +7,6 @@ import { UserRepository } from '../../repositories/user-repository';
 import { TransactionRepository } from '../../repositories/transaction-repository';
 import { StockService } from '../../services/stock-service';
 import { PortfolioService } from '../../services/portfolio-service';
-import { PortfolioCacheService } from '../../services/portfolio-cache-service';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
 
@@ -19,7 +18,6 @@ jest.mock('../../repositories/user-repository');
 jest.mock('../../repositories/transaction-repository');
 jest.mock('../../services/stock-service');
 jest.mock('../../services/portfolio-service');
-jest.mock('../../services/portfolio-cache-service');
 jest.mock('../../repositories/stock-token-repository');
 jest.mock('../../services/vendor/api-client');
 
@@ -72,7 +70,6 @@ describe('Buy Stock Handler', () => {
   const mockPortfolioService = {
     executeStockPurchase: jest.fn()
   };
-  const mockPortfolioCacheService = {};
   
   // Set environment variables for testing
   const originalEnv = process.env;
@@ -85,7 +82,6 @@ describe('Buy Stock Handler', () => {
     (TransactionRepository as jest.Mock).mockImplementation(() => mockTransactionRepository);
     (StockService as jest.Mock).mockImplementation(() => mockStockService);
     (PortfolioService as jest.Mock).mockImplementation(() => mockPortfolioService);
-    (PortfolioCacheService as jest.Mock).mockImplementation(() => mockPortfolioCacheService);
     (DynamoDB.DocumentClient as jest.Mock).mockImplementation(() => ({}));
     
     // Mock service methods
@@ -123,7 +119,8 @@ describe('Buy Stock Handler', () => {
       DYNAMODB_ACCESS_KEY_ID: 'test-key',
       DYNAMODB_SECRET_ACCESS_KEY: 'test-secret',
       DYNAMODB_ENDPOINT: 'http://localhost:8000',
-      DYNAMODB_TABLE: 'test-stock-tokens'
+      DYNAMODB_TABLE: 'test-stock-tokens',
+      PORTFOLIO_CACHE_TABLE: 'test-portfolio-cache'
     };
     
     // Clear all mocks before each test
@@ -163,7 +160,6 @@ describe('Buy Stock Handler', () => {
     expect(mockStockService.getStockBySymbol).toHaveBeenCalledWith('AAPL');
     
     // Verify that portfolio service was called with the correct parameters
-    // It appears the executeStockPurchase is being called with individual params, not an object
     expect(mockPortfolioService.executeStockPurchase).toHaveBeenCalledWith(
       '1', // portfolioId
       'AAPL', // symbol
