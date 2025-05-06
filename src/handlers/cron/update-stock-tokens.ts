@@ -1,5 +1,5 @@
 import { Handler } from 'aws-lambda';
-import { DailyStockTokenService } from '../../services/daily-stock-token-service';
+import { StockService } from '../../services/stock-service';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
 import { AppError, AuthenticationError } from '../../utils/errors/app-error';
 import { updateStockTokensEventSchema, apiKeySchema } from '../../types/schemas/handlers';
@@ -47,7 +47,7 @@ const updateStockTokensHandler: Handler = async (event, context) => {
   const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
   const vendorApiRepository = new VendorApiRepository();
   const vendorApi = new VendorApiClient(vendorApiRepository);
-  const service = new DailyStockTokenService(stockTokenRepo, vendorApi);
+  const service = new StockService(stockTokenRepo, vendorApi);
   await service.updateStockTokens().catch((error: any) => {
     console.error('Error updating stock tokens:', error);
     throw new AppError('Failed to update stock tokens', 500, 'INTERNAL_ERROR');

@@ -36,20 +36,18 @@ const getStockServiceInstance = (): StockService => {
   const { StockTokenRepository } = require('../../repositories/stock-token-repository');
   const { VendorApiClient } = require('../../services/vendor/api-client');
   const { VendorApiRepository } = require('../../repositories/vendor-api-repository');
-  const { DailyStockTokenService } = require('../../services/daily-stock-token-service');
   
   const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
   const vendorApiRepository = new VendorApiRepository();
   const vendorApi = new VendorApiClient(vendorApiRepository);
   
-  // Verificar tabla de tokens
-  const dailyStockService = new DailyStockTokenService(stockTokenRepo, vendorApi);
+  const stockService = new StockService(stockTokenRepo, vendorApi);
   
-  // Intentar verificar la tabla de tokens en segundo plano (sin await)
-  dailyStockService.checkTableExists(process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local')
+  // Verificar tabla de tokens en segundo plano (sin await)
+  stockService.checkTableExists(process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local')
     .catch((err: any) => console.warn('Error checking token table:', err));
   
-  return new StockService(stockTokenRepo, vendorApi);
+  return stockService;
 };
 
 /**

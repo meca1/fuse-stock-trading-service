@@ -9,18 +9,31 @@ import {
   STOCK_CONFIG 
 } from '../types/models/stock';
 import { StockNotFoundError, InvalidPriceError } from '../types/errors/stock-errors';
+import { DynamoDB } from '@aws-sdk/client-dynamodb';
 
 /**
- * Service to handle stock-related operations and token management
+ * Service to handle stock-related operations, token management and daily updates
  */
 export class StockService {
   private stockCache: StockCache = {};
   private requestsInProgress: Record<string, Promise<VendorStock | null>> = {};
+  private isTokenUpdateRunning = false;
+  private dynamoDb: DynamoDB;
 
   constructor(
     private stockTokenRepository: StockTokenRepository,
     private vendorApi: VendorApiClient
-  ) {}
+  ) {
+    // Initialize DynamoDB client for verifications
+    this.dynamoDb = new DynamoDB({
+      region: process.env.DYNAMODB_REGION || 'us-east-1',
+      credentials: {
+        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
+      },
+      endpoint: process.env.DYNAMODB_ENDPOINT
+    });
+  }
 
   /**
    * Executes a stock purchase through the vendor API
@@ -121,6 +134,115 @@ export class StockService {
       return await requestPromise;
     } finally {
       delete this.requestsInProgress[symbol];
+    }
+  }
+
+  /**
+   * Checks if the table exists before performing operations
+   */
+  public async checkTableExists(tableName: string): Promise<boolean> {
+    try {
+      await this.dynamoDb.describeTable({ TableName: tableName });
+      return true;
+    } catch (error: any) {
+      if (error.name === 'ResourceNotFoundException') {
+        await this.createTable(tableName);
+        return true;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Creates the table if it doesn't exist
+   */
+  private async createTable(tableName: string): Promise<void> {
+    try {
+      await this.dynamoDb.createTable({
+        TableName: tableName,
+        KeySchema: [
+          { AttributeName: 'symbol', KeyType: 'HASH' }
+        ],
+        AttributeDefinitions: [
+          { AttributeName: 'symbol', AttributeType: 'S' }
+        ],
+        ProvisionedThroughput: {
+          ReadCapacityUnits: 5,
+          WriteCapacityUnits: 5
+        }
+      });
+      
+      // Wait for table to become active
+      let tableActive = false;
+      while (!tableActive) {
+        const response = await this.dynamoDb.describeTable({ TableName: tableName });
+        if (response.Table && response.Table.TableStatus === 'ACTIVE') {
+          tableActive = true;
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    } catch (error) {
+      throw new Error(`Error creating table ${tableName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Updates stock tokens with robust error handling
+   */
+  public async updateStockTokens(): Promise<void> {
+    if (this.isTokenUpdateRunning) {
+      return;
+    }
+
+    this.isTokenUpdateRunning = true;
+
+    try {
+      const tableName = process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local';
+      
+      const tableExists = await this.checkTableExists(tableName);
+      if (!tableExists) {
+        throw new Error(`Table ${tableName} does not exist and could not be created`);
+      }
+
+      let currentToken: string | undefined;
+      const processedSymbols = new Set<string>();
+      const failedSymbols: string[] = [];
+
+      do {
+        const response = await this.vendorApi.listStocks(currentToken);
+        const stocks = response.data.items;
+        const nextToken = response.data.nextToken;
+        
+        // Process in larger batches to cover more stocks
+        const batchSize = 25;
+        for (let i = 0; i < stocks.length; i += batchSize) {
+          const batch = stocks.slice(i, i + batchSize);
+          
+          await Promise.all(
+            batch.map(async (stock) => {
+              if (!processedSymbols.has(stock.symbol)) {
+                try {
+                  await this.stockTokenRepository.saveToken(stock.symbol, currentToken || '');
+                  processedSymbols.add(stock.symbol);
+                } catch (error) {
+                  failedSymbols.push(stock.symbol);
+                }
+              }
+            })
+          );
+        }
+
+        currentToken = nextToken;
+      } while (currentToken);
+
+      if (failedSymbols.length > 0) {
+        throw new Error(`Token update failed for ${failedSymbols.length} stocks: ${failedSymbols.join(', ')}`);
+      }
+    } catch (error) {
+      throw new Error(`Error in stock token update: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      this.isTokenUpdateRunning = false;
     }
   }
 

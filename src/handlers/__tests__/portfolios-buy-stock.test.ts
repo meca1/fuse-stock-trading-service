@@ -8,7 +8,6 @@ import { TransactionRepository } from '../../repositories/transaction-repository
 import { StockService } from '../../services/stock-service';
 import { PortfolioService } from '../../services/portfolio-service';
 import { PortfolioCacheService } from '../../services/portfolio-cache-service';
-import { DailyStockTokenService } from '../../services/daily-stock-token-service';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
 
@@ -21,10 +20,8 @@ jest.mock('../../repositories/transaction-repository');
 jest.mock('../../services/stock-service');
 jest.mock('../../services/portfolio-service');
 jest.mock('../../services/portfolio-cache-service');
-jest.mock('../../services/daily-stock-token-service');
 jest.mock('../../repositories/stock-token-repository');
 jest.mock('../../services/vendor/api-client');
-jest.mock('../../repositories/vendor-api-repository');
 
 // Mock schema validation
 jest.mock('../../types/schemas/handlers', () => ({
@@ -69,15 +66,13 @@ describe('Buy Stock Handler', () => {
   };
   const mockStockService = {
     getStockBySymbol: jest.fn(),
-    isValidPrice: jest.fn()
+    isValidPrice: jest.fn(),
+    checkTableExists: jest.fn()
   };
   const mockPortfolioService = {
     executeStockPurchase: jest.fn()
   };
   const mockPortfolioCacheService = {};
-  const mockDailyStockTokenService = {
-    checkTableExists: jest.fn()
-  };
   
   // Set environment variables for testing
   const originalEnv = process.env;
@@ -91,7 +86,6 @@ describe('Buy Stock Handler', () => {
     (StockService as jest.Mock).mockImplementation(() => mockStockService);
     (PortfolioService as jest.Mock).mockImplementation(() => mockPortfolioService);
     (PortfolioCacheService as jest.Mock).mockImplementation(() => mockPortfolioCacheService);
-    (DailyStockTokenService as jest.Mock).mockImplementation(() => mockDailyStockTokenService);
     (DynamoDB.DocumentClient as jest.Mock).mockImplementation(() => ({}));
     
     // Mock service methods
@@ -110,6 +104,7 @@ describe('Buy Stock Handler', () => {
       price: 150
     });
     mockStockService.isValidPrice.mockReturnValue(true);
+    mockStockService.checkTableExists.mockResolvedValue(true);
     mockPortfolioService.executeStockPurchase.mockResolvedValue({
       id: '1',
       portfolio_id: '1',
@@ -120,7 +115,6 @@ describe('Buy Stock Handler', () => {
       status: 'COMPLETED',
       date: '2023-05-15T12:00:00Z'
     });
-    mockDailyStockTokenService.checkTableExists.mockResolvedValue(true);
     
     // Setup mock environment variables
     process.env = {

@@ -1,9 +1,9 @@
-import { DailyStockTokenService } from '../daily-stock-token-service';
+import { StockService } from '../stock-service';
 
-describe('DailyStockTokenService', () => {
+describe('StockService', () => {
   let repo: any;
   let vendor: any;
-  let service: DailyStockTokenService;
+  let service: StockService;
 
   beforeEach(() => {
     repo = {
@@ -12,7 +12,7 @@ describe('DailyStockTokenService', () => {
     vendor = {
       listStocks: jest.fn()
     };
-    service = new DailyStockTokenService(repo, vendor);
+    service = new StockService(repo, vendor);
     
     // Mock checkTableExists to always return true in tests
     service.checkTableExists = jest.fn().mockResolvedValue(true);
@@ -29,15 +29,15 @@ describe('DailyStockTokenService', () => {
   });
 
   it('should not run if already running', async () => {
-    (service as any).isRunning = true;
+    (service as any).isTokenUpdateRunning = true;
     await service.updateStockTokens();
     expect(vendor.listStocks).not.toHaveBeenCalled();
   });
 
-  it('should throw and reset isRunning on error', async () => {
+  it('should throw and reset isTokenUpdateRunning on error', async () => {
     vendor.listStocks.mockRejectedValue(new Error('fail'));
     await expect(service.updateStockTokens()).rejects.toThrow('fail');
-    expect((service as any).isRunning).toBe(false);
+    expect((service as any).isTokenUpdateRunning).toBe(false);
   });
 });
 

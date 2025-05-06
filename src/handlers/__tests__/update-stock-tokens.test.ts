@@ -3,7 +3,7 @@ import { DynamoDB } from 'aws-sdk';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
 import { VendorApiRepository } from '../../repositories/vendor-api-repository';
-import { DailyStockTokenService } from '../../services/daily-stock-token-service';
+import { StockService } from '../../services/stock-service';
 import { AppError } from '../../utils/errors/app-error';
 
 // Mock dependencies
@@ -11,7 +11,7 @@ jest.mock('aws-sdk');
 jest.mock('../../repositories/stock-token-repository');
 jest.mock('../../services/vendor/api-client');
 jest.mock('../../repositories/vendor-api-repository');
-jest.mock('../../services/daily-stock-token-service');
+jest.mock('../../services/stock-service');
 jest.mock('../../types/schemas/handlers', () => ({
   updateStockTokensEventSchema: {
     parse: jest.fn().mockImplementation(event => event)
@@ -42,7 +42,7 @@ describe('Update Stock Tokens Handler', () => {
     (StockTokenRepository as jest.Mock).mockImplementation(() => ({}));
     (VendorApiRepository as jest.Mock).mockImplementation(() => ({}));
     (VendorApiClient as jest.Mock).mockImplementation(() => ({}));
-    (DailyStockTokenService as jest.Mock).mockImplementation(() => mockServiceInstance);
+    (StockService as jest.Mock).mockImplementation(() => mockServiceInstance);
     
     // Mock update stock tokens method
     mockUpdateStockTokens.mockResolvedValue(undefined);
