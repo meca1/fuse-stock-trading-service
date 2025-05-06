@@ -2,6 +2,47 @@ import { VendorApiClient } from './vendor/api-client';
 import { VendorStock, ListStocksResponse, EnhancedVendorStock } from '../types/models/stock';
 import { StockTokenRepository } from '../repositories/stock-token-repository';
 
+// Configuración
+const CONFIG = {
+  CACHE_TTL: 300 * 1000, // 5 minutes in milliseconds
+  MAX_PAGES: 10,
+  PRICE_VARIATION_THRESHOLD: 0.02 // 2%
+} as const;
+
+// Errores específicos
+export class StockNotFoundError extends Error {
+  constructor(symbol: string) {
+    super(`Stock with symbol ${symbol} not found`);
+    this.name = 'StockNotFoundError';
+  }
+}
+
+export class InvalidPriceError extends Error {
+  constructor(currentPrice: number, requestedPrice: number) {
+    super(`Price must be within ${CONFIG.PRICE_VARIATION_THRESHOLD * 100}% of current price ($${currentPrice})`);
+    this.name = 'InvalidPriceError';
+  }
+}
+
+// Interfaces
+export interface ListedStock {
+  symbol: string;
+  name: string;
+  price: number;
+  currency: string;
+  lastUpdated: string | undefined;
+  market: string;
+  percentageChange?: number;
+  volume?: number;
+}
+
+export interface ListStocksResult {
+  stocks: ListedStock[];
+  nextToken?: string;
+  totalItems?: number;
+  lastUpdated?: string;
+}
+
 // Cache para almacenar resultados de stocks
 interface StockCache {
   [symbol: string]: {
@@ -15,8 +56,6 @@ interface StockCache {
  */
 export class StockService {
   private stockCache: StockCache = {};
-  private CACHE_TTL = 300 * 1000; // 5 minutes in milliseconds (increased from 1 to 5 minutes)
-  // Evitar solicitudes duplicadas - Promise puede ser null pero TypeScript debe saberlo
   private requestsInProgress: Record<string, Promise<VendorStock | null>> = {};
 
   constructor(
@@ -25,14 +64,16 @@ export class StockService {
   ) {}
 
   /**
-   * Obtiene el repositorio de tokens para uso externo
+   * Gets the stock token repository instance
+   * @returns The stock token repository instance
    */
   public getStockTokenRepository(): StockTokenRepository {
     return this.stockTokenRepository;
   }
 
   /**
-   * Obtiene el cliente de API del vendor para uso externo
+   * Gets the vendor API client instance
+   * @returns The vendor API client instance
    */
   public getVendorApi(): VendorApiClient {
     return this.vendorApi;
@@ -44,52 +85,40 @@ export class StockService {
    * @param price Price to buy at
    * @param quantity Quantity to buy
    * @returns Response from the vendor API
+   * @throws {StockNotFoundError} When the stock is not found
+   * @throws {InvalidPriceError} When the price is not within the allowed range
    */
   public async buyStock(symbol: string, price: number, quantity: number): Promise<any> {
     try {
-      // First check if the stock exists
       const stock = await this.getStockBySymbol(symbol);
       if (!stock) {
-        throw new Error(`Stock with symbol ${symbol} not found`);
+        throw new StockNotFoundError(symbol);
       }
       
-      // Then validate the price
       if (!this.isValidPrice(stock.price, price)) {
-        throw new Error(`Price must be within 2% of current price ($${stock.price})`);
+        throw new InvalidPriceError(stock.price, price);
       }
       
-      // Execute the purchase
-      const response = await this.vendorApi.buyStock(symbol, {
-        price,
-        quantity
-      });
-      
-      return response;
+      return await this.vendorApi.buyStock(symbol, { price, quantity });
     } catch (error) {
-      console.error(`Error buying stock ${symbol}:`, error);
-      throw error;
+      if (error instanceof StockNotFoundError || error instanceof InvalidPriceError) {
+        throw error;
+      }
+      throw new Error(`Error buying stock ${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }
-
-  /**
-   * Gets a stock's pagination token from the repository
-   * @param symbol Stock symbol
-   * @returns Token string or null if not found
-   */
-  private async getStockToken(symbol: string): Promise<string | null> {
-    return this.stockTokenRepository.getToken(symbol);
   }
 
   /**
    * Gets all available stocks, combining data from the vendor and local database
    * @param nextToken Optional token for pagination
    * @param search Optional search string for symbol or name
-   * @returns Object containing list of stocks and nextToken for pagination
+   * @returns Object containing list of stocks and pagination information
    */
-  async listAllStocks(nextToken?: string, search?: string): Promise<{ stocks: any[], nextToken?: string, totalItems?: number, lastUpdated?: string }> {
+  async listAllStocks(nextToken?: string, search?: string): Promise<ListStocksResult> {
     try {
       const { stocks: vendorStocks, nextToken: newNextToken } = await this.fetchAllVendorStocks(1, nextToken);
       let filteredStocks = vendorStocks;
+      
       if (search) {
         const searchLower = search.toLowerCase();
         filteredStocks = vendorStocks.filter(s =>
@@ -98,7 +127,7 @@ export class StockService {
         );
       }
       
-      const stocks = filteredStocks.map(stock => ({
+      const stocks: ListedStock[] = filteredStocks.map(stock => ({
         symbol: stock.symbol,
         name: stock.name,
         price: stock.price,
@@ -116,20 +145,19 @@ export class StockService {
         lastUpdated: stocks.length > 0 ? stocks[0].lastUpdated : undefined
       };
     } catch (error) {
-      console.error('Error getting stock list:', error);
-      throw error;
+      throw new Error(`Error getting stock list: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   /**
-   * Verifica si el precio está dentro del 2% del precio actual
-   * Uses toFixed(10) to handle floating-point precision issues
+   * Verifica si el precio está dentro del rango permitido del precio actual
+   * @param currentPrice Precio actual de la acción
+   * @param requestedPrice Precio solicitado
+   * @returns true si el precio está dentro del rango permitido
    */
   public isValidPrice(currentPrice: number, requestedPrice: number): boolean {
-    // Round to 10 decimal places to avoid floating-point precision issues
     const priceDiff = Number((Math.abs(requestedPrice - currentPrice)).toFixed(10));
-    const maxDiff = Number((currentPrice * 0.02).toFixed(10));
-    console.log(`Price validation: diff=${priceDiff}, maxAllowed=${maxDiff}, isValid=${priceDiff <= maxDiff}`);
+    const maxDiff = Number((currentPrice * CONFIG.PRICE_VARIATION_THRESHOLD).toFixed(10));
     return priceDiff <= maxDiff;
   }
 
@@ -139,52 +167,42 @@ export class StockService {
    * @returns Stock or null if it doesn't exist
    */
   public async getStockBySymbol(symbol: string): Promise<VendorStock | null> {
-    // Si ya hay una solicitud en curso para este símbolo, reutilizarla
     if (symbol in this.requestsInProgress) {
-      console.log(`Request already in progress for ${symbol}, reusing promise`);
       return this.requestsInProgress[symbol];
     }
 
-    // Crear una nueva promesa para esta solicitud y guardarla
-    const requestPromise = this._fetchStockBySymbol(symbol);
+    const requestPromise = this.fetchStockBySymbol(symbol);
     this.requestsInProgress[symbol] = requestPromise;
 
     try {
-      const result = await requestPromise;
-      return result;
+      return await requestPromise;
     } finally {
-      // Limpiar la referencia cuando se complete
       delete this.requestsInProgress[symbol];
     }
   }
 
   /**
-   * Implementación interna de búsqueda de stock
+   * Internal implementation of stock search
+   * @param symbol Stock symbol to search for
+   * @returns Stock data or null if not found
    */
-  private async _fetchStockBySymbol(symbol: string): Promise<VendorStock | null> {
+  private async fetchStockBySymbol(symbol: string): Promise<VendorStock | null> {
     try {
-      // Verificar caché primero
       const now = Date.now();
       const cachedStock = this.stockCache[symbol];
       
-      if (cachedStock && (now - cachedStock.timestamp) < this.CACHE_TTL) {
-        console.log(`Using cached data for ${symbol}, age: ${(now - cachedStock.timestamp)/1000}s`);
+      if (cachedStock && (now - cachedStock.timestamp) < CONFIG.CACHE_TTL) {
         return cachedStock.data;
       }
       
-      console.log(`Searching for token for ${symbol} in DynamoDB...`);
-      // Primero buscamos en la tabla de DynamoDB para obtener el token de la acción
-      const token = await this.getStockToken(symbol);
+      const token = await this.stockTokenRepository.getToken(symbol);
       
       if (token) {
-        console.log(`Token found for ${symbol} in DynamoDB, using token: ${token}`);
         try {
-          // Usamos el token para acceder directamente a la página correcta
           const response = await this.vendorApi.listStocks(token);
           const stock = response.data.items.find(item => item.symbol === symbol);
           
           if (stock) {
-            console.log(`Stock ${symbol} found with DynamoDB token`);
             const vendorStock = {
               symbol: stock.symbol,
               name: stock.name,
@@ -192,38 +210,26 @@ export class StockService {
               exchange: stock.exchange || 'NYSE'
             };
             
-            // Guardar en caché
             this.stockCache[symbol] = {
               data: vendorStock,
               timestamp: now
             };
             
             return vendorStock;
-          } else {
-            console.log(`Stock ${symbol} not found with stored token, starting search in multiple pages`);
           }
         } catch (error) {
-          console.warn(`Error using token for ${symbol}, starting search in multiple pages`, error);
+          // Continue with pagination search if token search fails
         }
-      } else {
-        console.log(`Token not found for ${symbol} in DynamoDB, starting search in multiple pages`);
       }
 
-      // Si no hay token en DynamoDB o no encontramos el stock con el token,
-      // buscamos en varias páginas
-      console.log(`Searching for ${symbol} in multiple pages...`);
-      
       let currentToken: string | undefined = undefined;
       let pageCount = 0;
-      const MAX_PAGES = 10;
       
       do {
-        console.log(`Searching for ${symbol} in page ${pageCount + 1}`);
         const response = await this.vendorApi.listStocks(currentToken);
         const stock = response.data.items.find(item => item.symbol === symbol);
         
         if (stock) {
-          console.log(`Found stock ${symbol} in page ${pageCount + 1}`);
           const vendorStock = {
             symbol: stock.symbol,
             name: stock.name,
@@ -231,11 +237,8 @@ export class StockService {
             exchange: stock.exchange || 'NYSE'
           };
           
-          // Guardar token para optimizar búsquedas futuras
-          console.log(`Saving token for ${symbol} in DynamoDB for future searches`);
           await this.stockTokenRepository.saveToken(symbol, currentToken || '');
           
-          // Guardar en caché
           this.stockCache[symbol] = {
             data: vendorStock,
             timestamp: now
@@ -247,13 +250,32 @@ export class StockService {
         currentToken = response.data.nextToken;
         pageCount++;
         
-      } while (currentToken && pageCount < MAX_PAGES);
+      } while (currentToken && pageCount < CONFIG.MAX_PAGES);
       
-      console.warn(`Stock not found: ${symbol} after searching in ${pageCount} pages`);
       return null;
     } catch (error) {
-      console.error(`Error getting stock ${symbol}:`, error);
-      throw error;
+      throw new Error(`Error getting stock ${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Gets the current price of a stock
+   * @param symbol Stock symbol
+   * @returns Object containing the current price
+   * @throws {StockNotFoundError} When the stock is not found
+   */
+  public async getCurrentPrice(symbol: string): Promise<{ price: number }> {
+    try {
+      const stock = await this.getStockBySymbol(symbol);
+      if (!stock) {
+        throw new StockNotFoundError(symbol);
+      }
+      return { price: stock.price };
+    } catch (error) {
+      if (error instanceof StockNotFoundError) {
+        throw error;
+      }
+      throw new Error(`Error getting current price for ${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -291,19 +313,6 @@ export class StockService {
       };
     } catch (error) {
       console.error('Error fetching vendor stocks:', error);
-      throw error;
-    }
-  }
-
-  public async getCurrentPrice(symbol: string): Promise<{ price: number }> {
-    try {
-      const stock = await this.getStockBySymbol(symbol);
-      if (!stock) {
-        throw new Error(`Stock not found: ${symbol}`);
-      }
-      return { price: stock.price };
-    } catch (error) {
-      console.error(`Error getting current price for ${symbol}:`, error);
       throw error;
     }
   }
