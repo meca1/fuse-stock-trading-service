@@ -1,7 +1,7 @@
 import { TransactionRepository } from '../repositories/transaction-repository';
 import { ITransaction } from '../types/models/transaction';
 import { TransactionStatus } from '../types/common/enums';
-import { IReportService, ReportData } from './service-types';
+import { IReportService, ReportData } from '../types/models/report';
 
 /**
  * Service for generating transaction reports
@@ -116,7 +116,7 @@ export class ReportService implements IReportService {
     
     // Failed transactions table
     const failedRows = failedTransactions
-      .map(t => {
+      .map((t: ITransaction) => {
         return `
           <tr>
             <td>${t.id}</td>

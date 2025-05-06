@@ -166,7 +166,9 @@ describe('PortfolioCacheService', () => {
       await cacheService.cacheUserPortfolioSummary('user123', mockData);
       
       expect(checkTableExistsSpy).toHaveBeenCalled();
-      expect(mockDynamoDb.put).toHaveBeenCalledWith({
+      const putCall = mockDynamoDb.put.mock.calls[0]?.[0];
+      expect(putCall).toBeDefined();
+      expect(putCall).toEqual({
         TableName: mockTableName,
         Item: {
           key: 'portfolio:user:user123',
@@ -176,7 +178,8 @@ describe('PortfolioCacheService', () => {
       });
       
       // Verify TTL is in the future (within 5 minutes)
-      const ttl = mockDynamoDb.put.mock.calls[0][0].Item.ttl;
+      const ttl = putCall?.Item?.ttl;
+      expect(ttl).toBeDefined();
       const now = Math.floor(Date.now() / 1000);
       expect(ttl).toBeGreaterThan(now);
       expect(ttl).toBeLessThanOrEqual(now + 300);
@@ -192,9 +195,12 @@ describe('PortfolioCacheService', () => {
       
       await cacheService.cacheUserPortfolioSummary('user123', mockData);
       
-      const cachedData = mockDynamoDb.put.mock.calls[0][0].Item.data;
-      expect(cachedData.timestamp).toBeDefined();
-      expect(typeof cachedData.timestamp).toBe('string');
+      const putCall = mockDynamoDb.put.mock.calls[0]?.[0];
+      expect(putCall).toBeDefined();
+      const cachedData = putCall?.Item?.data;
+      expect(cachedData).toBeDefined();
+      expect(cachedData?.timestamp).toBeDefined();
+      expect(typeof cachedData?.timestamp).toBe('string');
     });
     
     it('should not throw when error occurs', async () => {
@@ -214,7 +220,7 @@ describe('PortfolioCacheService', () => {
     it('should return null when cache is disabled', async () => {
       cacheService = new PortfolioCacheService(mockDynamoDb, mockTableName, false);
       
-      const result = await cacheService.getCachedPortfolioSummary(123);
+      const result = await cacheService.getCachedPortfolioSummary('123');
       
       expect(result).toBeNull();
       expect(mockDynamoDb.get).not.toHaveBeenCalled();
@@ -222,7 +228,7 @@ describe('PortfolioCacheService', () => {
     
     it('should return cached data when valid cache exists', async () => {
       const now = Math.floor(Date.now() / 1000);
-      const mockCacheData = { id: 123, stocks: [{ symbol: 'AAPL', quantity: 10 }] };
+      const mockCacheData = { id: '123', stocks: [{ symbol: 'AAPL', quantity: 10 }] };
       
       mockDynamoDb.get.mockReturnValue({
         promise: jest.fn().mockResolvedValue({
@@ -234,7 +240,7 @@ describe('PortfolioCacheService', () => {
         })
       } as any);
       
-      const result = await cacheService.getCachedPortfolioSummary(123);
+      const result = await cacheService.getCachedPortfolioSummary('123');
       
       expect(result).toEqual(mockCacheData);
       expect(mockDynamoDb.get).toHaveBeenCalledWith({
@@ -242,20 +248,31 @@ describe('PortfolioCacheService', () => {
         Key: { key: 'portfolio:id:123' }
       });
     });
+    
+    it('should return null when no cache exists', async () => {
+      mockDynamoDb.get.mockReturnValue({
+        promise: jest.fn().mockResolvedValue({ Item: undefined })
+      } as any);
+      
+      const result = await cacheService.getCachedPortfolioSummary('123');
+      
+      expect(result).toBeNull();
+    });
   });
   
   describe('cachePortfolioSummary', () => {
     it('should cache portfolio data correctly', async () => {
       jest.spyOn(cacheService, 'checkTableExists').mockResolvedValue(true);
-      const mockData = { id: 123, stocks: [{ symbol: 'AAPL', quantity: 10 }] };
+      const mockData = { id: '123', stocks: [{ symbol: 'AAPL', quantity: 10 }] };
       
       mockDynamoDb.put.mockReturnValue({
         promise: jest.fn().mockResolvedValue({})
       } as any);
       
-      await cacheService.cachePortfolioSummary(123, mockData);
+      await cacheService.cachePortfolioSummary('123', mockData);
       
-      expect(mockDynamoDb.put).toHaveBeenCalledWith({
+      const putCall = mockDynamoDb.put.mock.calls[0][0];
+      expect(putCall).toEqual({
         TableName: mockTableName,
         Item: {
           key: 'portfolio:id:123',
@@ -296,11 +313,35 @@ describe('PortfolioCacheService', () => {
         promise: jest.fn().mockResolvedValue({})
       } as any);
       
-      await cacheService.invalidatePortfolioCache(123);
+      await cacheService.invalidatePortfolioCache('123');
       
       expect(mockDynamoDb.delete).toHaveBeenCalledWith({
         TableName: mockTableName,
         Key: { key: 'portfolio:id:123' }
+      });
+    });
+  });
+
+  describe('invalidateAllUserRelatedCaches', () => {
+    it('should invalidate all related caches', async () => {
+      mockDynamoDb.delete.mockReturnValue({
+        promise: jest.fn().mockResolvedValue({})
+      } as any);
+      
+      await cacheService.invalidateAllUserRelatedCaches('user123', ['123', '456']);
+      
+      expect(mockDynamoDb.delete).toHaveBeenCalledTimes(3); // Once for user cache, twice for portfolio caches
+      expect(mockDynamoDb.delete).toHaveBeenCalledWith({
+        TableName: mockTableName,
+        Key: { key: 'portfolio:user:user123' }
+      });
+      expect(mockDynamoDb.delete).toHaveBeenCalledWith({
+        TableName: mockTableName,
+        Key: { key: 'portfolio:id:123' }
+      });
+      expect(mockDynamoDb.delete).toHaveBeenCalledWith({
+        TableName: mockTableName,
+        Key: { key: 'portfolio:id:456' }
       });
     });
   });

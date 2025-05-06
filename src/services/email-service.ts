@@ -1,6 +1,6 @@
 import { SendEmailCommandInput, SES } from '@aws-sdk/client-ses';
 import * as nodemailer from 'nodemailer';
-import { ReportData, EmailParams } from './service-types';
+import { EmailParams } from '../types/models/email';
 
 // Interfaces
 

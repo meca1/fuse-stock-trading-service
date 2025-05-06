@@ -12,16 +12,16 @@ export interface IPortfolioStock {
   updated_at?: Date;
 }
 
+/**
+ * Interface for portfolio data
+ */
 export interface IPortfolio {
-  id: number;
-  name: string;
-  description?: string;
+  id: string;
   user_id: string;
+  name: string;
   total_value?: number;
-  total_profit_loss?: number;
-  stocks?: IPortfolioStock[];
-  created_at?: Date;
-  updated_at?: Date;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface IPortfolioSummary {
@@ -33,21 +33,31 @@ export interface IPortfolioSummary {
   profit_loss: number;
 }
 
+/**
+ * Interface for portfolio stock summary
+ */
 export interface PortfolioStock {
   symbol: string;
-  name: string;
   quantity: number;
-  currentPrice: number;
-  profitLoss: {
-    absolute: number;
-    percentage: number;
-  };
+  total_cost: number;
 }
 
+/**
+ * Interface for portfolio summary response
+ */
 export interface PortfolioSummaryResponse {
   userId: string;
   totalValue: number;
   currency: string;
   lastUpdated: string;
-  stocks: PortfolioStock[];
+  stocks: {
+    symbol: string;
+    name: string;
+    quantity: number;
+    currentPrice: number;
+    profitLoss: {
+      absolute: number;
+      percentage: number;
+    };
+  }[];
 } 

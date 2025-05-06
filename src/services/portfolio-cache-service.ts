@@ -37,7 +37,7 @@ export class PortfolioCacheService {
   /**
    * Generate a cache key for a specific portfolio
    */
-  private generatePortfolioKey(portfolioId: number): string {
+  private generatePortfolioKey(portfolioId: string): string {
     return `portfolio:id:${portfolioId}`;
   }
 
@@ -152,7 +152,7 @@ export class PortfolioCacheService {
   /**
    * Get cached portfolio summary
    */
-  async getCachedPortfolioSummary(portfolioId: number): Promise<any | null> {
+  async getCachedPortfolioSummary(portfolioId: string): Promise<any | null> {
     if (!this.isEnabled) {
       console.log('[PORTFOLIO CACHE] Cache is disabled, skipping read');
       return null;
@@ -184,7 +184,7 @@ export class PortfolioCacheService {
   /**
    * Cache portfolio summary
    */
-  async cachePortfolioSummary(portfolioId: number, data: any): Promise<void> {
+  async cachePortfolioSummary(portfolioId: string, data: any): Promise<void> {
     if (!this.isEnabled) {
       console.log('Cache disabled. Skipping cachePortfolioSummary.');
       return;
@@ -245,7 +245,7 @@ export class PortfolioCacheService {
    * Invalidate cache for a specific portfolio
    * Called after a transaction to ensure data is fresh
    */
-  async invalidatePortfolioCache(portfolioId: number): Promise<void> {
+  async invalidatePortfolioCache(portfolioId: string): Promise<void> {
     if (!this.isEnabled) {
       console.log('[PORTFOLIO CACHE] Cache is disabled, skipping invalidation');
       return;
@@ -270,7 +270,7 @@ export class PortfolioCacheService {
    * Find and invalidate all caches related to a user
    * This includes the user's portfolio summary and all individual portfolios
    */
-  async invalidateAllUserRelatedCaches(userId: string, portfolioIds: number[]): Promise<void> {
+  async invalidateAllUserRelatedCaches(userId: string, portfolioIds: string[]): Promise<void> {
     if (!this.isEnabled) {
       console.log('[PORTFOLIO CACHE] Cache is disabled, skipping invalidation');
       return;

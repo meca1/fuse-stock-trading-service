@@ -90,7 +90,7 @@ export class PortfolioService {
    * Executes a stock purchase
    */
   async executeStockPurchase(
-    portfolioId: number,
+    portfolioId: string,
     symbol: string,
     quantity: number,
     price: number,
@@ -131,7 +131,8 @@ export class PortfolioService {
         quantity,
         price,
         type,
-        status: TransactionStatus.COMPLETED
+        status: TransactionStatus.COMPLETED,
+        date: new Date().toISOString()
       });
 
       // Iniciamos invalidación de caché en segundo plano, sin esperar su finalización
@@ -148,7 +149,7 @@ export class PortfolioService {
    * Invalidar cachés relacionadas con el portfolio, de forma asíncrona
    * Esta operación se ejecuta en segundo plano, sin bloquear la transacción principal
    */
-  private async invalidatePortfolioCaches(userId: string, portfolioId: number): Promise<void> {
+  private async invalidatePortfolioCaches(userId: string, portfolioId: string): Promise<void> {
     try {
       console.log(`Invalidating caches for user ${userId} and portfolio ${portfolioId}`);
       await this.cacheService.invalidateAllUserRelatedCaches(
@@ -233,7 +234,7 @@ export class PortfolioService {
   /**
    * Obtiene un resumen completo del portfolio incluyendo el valor actual de las acciones
    */
-  async getPortfolioSummary(portfolioId: number): Promise<PortfolioResponseWithCache> {
+  async getPortfolioSummary(portfolioId: string): Promise<PortfolioResponseWithCache> {
     try {
       const timestamp = new Date().toISOString();
       // Check cache first
@@ -309,7 +310,7 @@ export class PortfolioService {
   /**
    * Obtiene el valor actual del portfolio
    */
-  async getPortfolioValue(portfolioId: number): Promise<number> {
+  async getPortfolioValue(portfolioId: string): Promise<number> {
     const summary = await this.getPortfolioSummary(portfolioId);
     return summary.data.totalValue;
   }

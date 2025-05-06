@@ -1,95 +1,95 @@
 import { DatabaseService } from '../config/database';
-import { IPortfolio} from '../types/models/portfolio';
+import { IPortfolio, PortfolioStock } from '../types/models/portfolio';
 
+/**
+ * Repository for portfolio-related database operations
+ */
 export class PortfolioRepository {
-  constructor(private readonly dbService: DatabaseService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   /**
-   * Finds a portfolio by its unique ID.
-   * @param id - The ID of the portfolio to find.
-   * @returns The found portfolio or null if it does not exist.
+   * Finds a portfolio by its ID
    */
-  async findById(id: number): Promise<IPortfolio | null> {
-    const result = await this.dbService.query<IPortfolio>(
-      'SELECT * FROM portfolios WHERE id = $1',
-      [id]
-    );
-    return result.rows[0] || null;
+  async findById(id: string): Promise<IPortfolio | null> {
+    try {
+      const result = await this.db.query(
+        'SELECT * FROM portfolios WHERE id = $1',
+        [id]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error('Error finding portfolio by ID:', error);
+      throw error;
+    }
   }
 
   /**
-   * Lists all portfolios associated with a user.
-   * @param userId - The user ID who owns the portfolios.
-   * @returns An array of portfolios belonging to the user.
+   * Finds all portfolios for a user
    */
   async findByUserId(userId: string): Promise<IPortfolio[]> {
-    const result = await this.dbService.query<IPortfolio>(
-      'SELECT * FROM portfolios WHERE user_id = $1',
-      [userId]
-    );
-    return result.rows;
+    try {
+      const result = await this.db.query(
+        'SELECT * FROM portfolios WHERE user_id = $1',
+        [userId]
+      );
+      return result.rows;
+    } catch (error) {
+      console.error('Error finding portfolios by user ID:', error);
+      throw error;
+    }
   }
 
   /**
-   * Creates a new portfolio in the database.
-   * @param portfolio - Object with the new portfolio data (without id, created_at, or updated_at).
-   * @returns The created portfolio with all its fields.
+   * Creates a new portfolio
    */
   async create(portfolio: Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>): Promise<IPortfolio> {
-    const result = await this.dbService.query<IPortfolio>(
-      `INSERT INTO portfolios (user_id, name, description, total_value, total_profit_loss) 
-       VALUES ($1, $2, $3, $4, $5) 
-       RETURNING *`,
-      [portfolio.user_id, portfolio.name, portfolio.description, portfolio.total_value || 0, portfolio.total_profit_loss || 0]
-    );
-    return result.rows[0];
+    try {
+      const result = await this.db.query(
+        'INSERT INTO portfolios (user_id, name) VALUES ($1, $2) RETURNING *',
+        [portfolio.user_id, portfolio.name]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error creating portfolio:', error);
+      throw error;
+    }
   }
 
   /**
-   * Gets a summary of the stocks in a portfolio, including quantity and total cost per symbol.
-   * Only includes stocks with a positive net quantity.
-   * @param portfolioId - The ID of the portfolio to query.
-   * @returns An array with the summary for each stock (symbol, quantity, total cost).
+   * Gets a summary of stocks in a portfolio
    */
-  async getPortfolioStockSummary(portfolioId: number): Promise<{
-    symbol: string;
-    quantity: number;
-    total_cost: number;
-  }[]> {
-    const result = await this.dbService.query<{
-      symbol: string;
-      quantity: number;
-      total_cost: number;
-    }>(
-      `WITH stock_summary AS (
+  async getPortfolioStockSummary(portfolioId: string): Promise<PortfolioStock[]> {
+    try {
+      const result = await this.db.query(`
         SELECT 
           stock_symbol as symbol,
           SUM(CASE WHEN type = 'BUY' THEN quantity ELSE -quantity END) as quantity,
           SUM(CASE WHEN type = 'BUY' THEN quantity * price ELSE -quantity * price END) as total_cost
         FROM transactions 
-        WHERE portfolio_id = $1
+        WHERE portfolio_id = $1 AND status = 'COMPLETED'
         GROUP BY stock_symbol
         HAVING SUM(CASE WHEN type = 'BUY' THEN quantity ELSE -quantity END) > 0
-      )
-      SELECT * FROM stock_summary`,
-      [portfolioId]
-    );
-    return result.rows;
+      `, [portfolioId]);
+      
+      return result.rows;
+    } catch (error) {
+      console.error('Error getting portfolio stock summary:', error);
+      throw error;
+    }
   }
 
   /**
-   * Updates the total value and the updated_at timestamp of a portfolio.
-   * @param id - The ID of the portfolio to update.
-   * @param totalValue - The new total value of the portfolio.
-   * @returns void
+   * Updates the total value and timestamp of a portfolio
    */
-  async updateValueAndTimestamp(id: number, totalValue: number): Promise<void> {
-    await this.dbService.query(
-      `UPDATE portfolios 
-       SET total_value = $2,
-           updated_at = NOW() 
-       WHERE id = $1`,
-      [id, totalValue]
-    );
+  async updateValueAndTimestamp(id: string, value: number): Promise<void> {
+    try {
+      await this.db.query(
+        'UPDATE portfolios SET total_value = $1, updated_at = NOW() WHERE id = $2',
+        [value, id]
+      );
+    } catch (error) {
+      console.error('Error updating portfolio value:', error);
+      throw error;
+    }
   }
 }

@@ -1,15 +1,18 @@
-import { TransactionStatus, TransactionType } from '../common/enums';
+import { TransactionType, TransactionStatus } from '../common/enums';
 
+/**
+ * Interface for transaction data
+ */
 export interface ITransaction {
-  id: number;
-  portfolio_id: number;
+  id: string;
+  portfolio_id: string;
   stock_symbol: string;
   type: TransactionType;
   quantity: number;
   price: number;
   status: TransactionStatus;
-  date?: Date;
   notes?: string;
-  created_at?: Date;
-  updated_at?: Date;
+  date: string;
+  created_at?: string;
+  updated_at?: string;
 } 
