@@ -3,8 +3,8 @@ import { StockService } from '../../services/stock-service';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
 import { VendorApiRepository } from '../../repositories/vendor-api-repository';
-import { DynamoDB } from 'aws-sdk';
-import AWS from 'aws-sdk';
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
+import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
 import { AppError, AuthenticationError } from '../../utils/errors/app-error';
 import { apiKeySchema, listStocksQuerySchema } from '../../types/schemas/handlers';
@@ -20,7 +20,11 @@ const dynamoConfig = {
   endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
 };
 
-const dynamo = new AWS.DynamoDB.DocumentClient(dynamoConfig);
+const dynamo = DynamoDBDocument.from(new DynamoDB(dynamoConfig), {
+  marshallOptions: {
+    removeUndefinedValues: true
+  }
+});
 const STOCK_CACHE_TABLE = process.env.STOCK_CACHE_TABLE || 'fuse-stock-cache-local';
 const CACHE_TTL = 300; // 5 minutes
 
@@ -78,7 +82,7 @@ const listStocksHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewa
     const cacheRes = await dynamo.get({
       TableName: STOCK_CACHE_TABLE,
       Key: { key: cacheKey },
-    }).promise();
+    });
     
     console.log('Cache response', { 
       itemExists: !!cacheRes.Item,
@@ -104,7 +108,7 @@ const listStocksHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewa
     console.log('Using cached data', { itemsCount: items.length, newNextToken });
   } else {
     // 4. Call the API provider
-    const dynamoDb = new DynamoDB.DocumentClient(dynamoConfig);
+    const dynamoDb = DynamoDBDocument.from(new DynamoDB(dynamoConfig));
     const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
     const vendorApiRepository = new VendorApiRepository();
     const vendorApi = new VendorApiClient(vendorApiRepository);
@@ -149,7 +153,7 @@ const listStocksHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewa
       await dynamo.put({
         TableName: STOCK_CACHE_TABLE,
         Item: cacheItem,
-      }).promise();
+      });
       console.log('Cache write successful');
       
       // If we have a next token, also cache a placeholder for the next page
@@ -164,7 +168,7 @@ const listStocksHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewa
             nextToken: newNextToken,
             ttl: Math.floor(Date.now() / 1000) + 60, // Short TTL for placeholders
           },
-        }).promise();
+        });
       }
     } catch (err) {
       console.error(`[CACHE WRITE ERROR] Tabla: ${STOCK_CACHE_TABLE}, Clave: ${cacheKey}`, err);

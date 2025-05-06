@@ -1,9 +1,9 @@
 import { PortfolioCacheService } from '../portfolio-cache-service';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 
 describe('PortfolioCacheService', () => {
   let cacheService: PortfolioCacheService;
-  let mockDynamoDb: jest.Mocked<DynamoDB.DocumentClient>;
+  let mockDynamoDb: jest.Mocked<DynamoDBDocument>;
   const mockTableName = 'test-cache-table';
   
   beforeEach(() => {

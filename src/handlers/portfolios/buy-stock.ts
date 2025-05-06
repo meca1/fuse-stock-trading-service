@@ -10,7 +10,8 @@ import { wrapHandler } from '../../middleware/lambda-error-handler';
 import { AppError, ValidationError, NotFoundError, BusinessError, AuthenticationError } from '../../utils/errors/app-error';
 import { buyStockParamsSchema, buyStockBodySchema, apiKeySchema } from '../../types/schemas/handlers';
 import { handleZodError } from '../../middleware/zod-error-handler';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
+import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { PortfolioCacheService } from '../../services/portfolio-cache-service';
 
 // We need to manually define service factory to fix the module not found error
@@ -27,7 +28,7 @@ const getStockServiceInstance = (): StockService => {
     endpoint: process.env.DYNAMODB_ENDPOINT
   };
   
-  const dynamoDb = new DynamoDB.DocumentClient(dynamoConfig);
+  const dynamoDb = DynamoDBDocument.from(new DynamoDB(dynamoConfig));
   
   // Import these inline to avoid circular dependencies
   const { StockTokenRepository } = require('../../repositories/stock-token-repository');
@@ -90,7 +91,7 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
     endpoint: process.env.DYNAMODB_ENDPOINT
   };
   
-  const dynamoDb = new DynamoDB.DocumentClient(dynamoConfig);
+  const dynamoDb = DynamoDBDocument.from(new DynamoDB(dynamoConfig));
   const stockService = getStockServiceInstance();
   
   // Inicializar database service en paralelo con la validación

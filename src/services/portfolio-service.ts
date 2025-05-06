@@ -6,7 +6,8 @@ import { TransactionType, TransactionStatus } from '../types/common/enums';
 import { StockService } from './stock-service';
 import { UserRepository } from '../repositories/user-repository';
 import { PortfolioCacheService } from './portfolio-cache-service';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
+import { DynamoDB } from '@aws-sdk/client-dynamodb';
 
 /**
  * Interface for standardized response with cache metadata
@@ -32,13 +33,17 @@ export class PortfolioService {
   ) {
     // If no cache service is provided, create one
     if (!cacheService) {
-      const dynamoDb = new DynamoDB.DocumentClient({
+      const dynamoDb = DynamoDBDocument.from(new DynamoDB({
         region: process.env.DYNAMODB_REGION || 'us-east-1',
         credentials: {
           accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
           secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
         },
         endpoint: process.env.DYNAMODB_ENDPOINT
+      }), {
+        marshallOptions: {
+          removeUndefinedValues: true
+        }
       });
       this.cacheService = new PortfolioCacheService(dynamoDb);
     } else {

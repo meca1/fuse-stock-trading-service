@@ -1,8 +1,8 @@
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBDocument, GetCommandInput, PutCommandInput } from '@aws-sdk/lib-dynamodb';
 
 export class StockTokenRepository {
   constructor(
-    private dynamoDb: DynamoDB.DocumentClient,
+    private dynamoDb: DynamoDBDocument,
     private tableName: string
   ) {}
 
@@ -13,13 +13,15 @@ export class StockTokenRepository {
    */
   async getToken(symbol: string): Promise<string | null> {
     try {
-      const params: DynamoDB.DocumentClient.GetItemInput = {
+      const params: GetCommandInput = {
         TableName: this.tableName,
         Key: { symbol }
       };
       
       console.log(`Searching for token for ${symbol} in table ${this.tableName}...`);
-      const result = await this.dynamoDb.get(params).promise();
+      const result = await // The `.promise()` call might be on an JS SDK v2 client API.
+      // If yes, please remove .promise(). If not, remove this comment.
+      this.dynamoDb.get(params).promise();
       
       if (result.Item && 'nextToken' in result.Item) {
         console.log(`Token found for ${symbol}: ${result.Item.nextToken}`);
@@ -43,7 +45,7 @@ export class StockTokenRepository {
   async saveToken(symbol: string, nextToken: string): Promise<void> {
     try {
       const timestamp = new Date().toISOString();
-      const params: DynamoDB.DocumentClient.PutItemInput = {
+      const params: PutCommandInput = {
         TableName: this.tableName,
         Item: {
           symbol,
@@ -53,7 +55,9 @@ export class StockTokenRepository {
       };
       
       console.log(`Saving token for ${symbol} in table ${this.tableName}: ${nextToken}`);
-      await this.dynamoDb.put(params).promise();
+      await // The `.promise()` call might be on an JS SDK v2 client API.
+      // If yes, please remove .promise(). If not, remove this comment.
+      this.dynamoDb.put(params).promise();
       console.log(`Token successfully saved for ${symbol} at ${timestamp}`);
     } catch (error) {
       console.error(`Error saving token for ${symbol} in DynamoDB:`, error);

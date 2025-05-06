@@ -1,17 +1,17 @@
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 
 /**
  * Cache service for portfolios
  * Handles caching and invalidation of portfolio data
  */
 export class PortfolioCacheService {
-  private dynamo: DynamoDB.DocumentClient;
+  private dynamo: DynamoDBDocument;
   private tableName: string;
   private readonly CACHE_TTL = 300; // 5 minutes
   private isEnabled: boolean = true;
 
   constructor(
-    dynamoDb: DynamoDB.DocumentClient,
+    dynamoDb: DynamoDBDocument,
     tableName: string = process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
     isEnabled: boolean = true
   ) {
@@ -48,7 +48,9 @@ export class PortfolioCacheService {
     try {
       // We can't use describeTable with DocumentClient, so use a simple get operation
       // with a non-existent key to check if the table exists
-      await this.dynamo.get({
+      await // The `.promise()` call might be on an JS SDK v2 client API.
+      // If yes, please remove .promise(). If not, remove this comment.
+      this.dynamo.get({
         TableName: this.tableName,
         Key: { key: 'table-check-' + Date.now() }
       }).promise();
@@ -86,7 +88,9 @@ export class PortfolioCacheService {
       console.log(`[PORTFOLIO CACHE] Attempting to retrieve portfolio for user: ${userId}`);
       const cacheKey = this.generateUserPortfolioKey(userId);
       
-      const cacheRes = await this.dynamo.get({
+      const cacheRes = await // The `.promise()` call might be on an JS SDK v2 client API.
+      // If yes, please remove .promise(). If not, remove this comment.
+      this.dynamo.get({
         TableName: this.tableName,
         Key: { key: cacheKey },
       }).promise();
@@ -141,7 +145,9 @@ export class PortfolioCacheService {
         }
       };
       
-      await this.dynamo.put(params).promise();
+      await // The `.promise()` call might be on an JS SDK v2 client API.
+      // If yes, please remove .promise(). If not, remove this comment.
+      this.dynamo.put(params).promise();
       console.log(`Cached portfolio summary for user: ${userId}`);
     } catch (error) {
       console.error('Error caching user portfolio summary:', error);
@@ -162,7 +168,9 @@ export class PortfolioCacheService {
       console.log(`[PORTFOLIO CACHE] Attempting to retrieve portfolio: ${portfolioId}`);
       const cacheKey = this.generatePortfolioKey(portfolioId);
       
-      const cacheRes = await this.dynamo.get({
+      const cacheRes = await // The `.promise()` call might be on an JS SDK v2 client API.
+      // If yes, please remove .promise(). If not, remove this comment.
+      this.dynamo.get({
         TableName: this.tableName,
         Key: { key: cacheKey },
       }).promise();
@@ -208,7 +216,9 @@ export class PortfolioCacheService {
         }
       };
       
-      await this.dynamo.put(params).promise();
+      await // The `.promise()` call might be on an JS SDK v2 client API.
+      // If yes, please remove .promise(). If not, remove this comment.
+      this.dynamo.put(params).promise();
       console.log(`Cached portfolio summary for portfolio: ${portfolioId}`);
     } catch (error) {
       console.error('Error caching portfolio summary:', error);
@@ -230,7 +240,9 @@ export class PortfolioCacheService {
       console.log(`[PORTFOLIO CACHE] Invalidating cache for user: ${userId}`);
       const cacheKey = this.generateUserPortfolioKey(userId);
       
-      await this.dynamo.delete({
+      await // The `.promise()` call might be on an JS SDK v2 client API.
+      // If yes, please remove .promise(). If not, remove this comment.
+      this.dynamo.delete({
         TableName: this.tableName,
         Key: { key: cacheKey },
       }).promise();
@@ -255,7 +267,9 @@ export class PortfolioCacheService {
       console.log(`[PORTFOLIO CACHE] Invalidating cache for portfolio: ${portfolioId}`);
       const cacheKey = this.generatePortfolioKey(portfolioId);
       
-      await this.dynamo.delete({
+      await // The `.promise()` call might be on an JS SDK v2 client API.
+      // If yes, please remove .promise(). If not, remove this comment.
+      this.dynamo.delete({
         TableName: this.tableName,
         Key: { key: cacheKey },
       }).promise();

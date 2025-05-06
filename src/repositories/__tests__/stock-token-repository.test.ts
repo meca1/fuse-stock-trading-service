@@ -1,8 +1,8 @@
 import { StockTokenRepository } from '../stock-token-repository';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 
 describe('StockTokenRepository', () => {
-  let dynamoDb: jest.Mocked<DynamoDB.DocumentClient>;
+  let dynamoDb: jest.Mocked<DynamoDBDocument>;
   let repo: StockTokenRepository;
   const tableName = 'test-table';
 

@@ -3,7 +3,8 @@ import { DailyStockTokenService } from '../../services/daily-stock-token-service
 import { wrapHandler } from '../../middleware/lambda-error-handler';
 import { AppError, AuthenticationError } from '../../utils/errors/app-error';
 import { updateStockTokensEventSchema, apiKeySchema } from '../../types/schemas/handlers';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
+import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
 import { VendorApiRepository } from '../../repositories/vendor-api-repository';
@@ -35,14 +36,14 @@ const updateStockTokensHandler: Handler = async (event, context) => {
     }
   }
   
-  const dynamoDb = new DynamoDB.DocumentClient({
+  const dynamoDb = DynamoDBDocument.from(new DynamoDB({
     region: process.env.DYNAMODB_REGION || 'us-east-1',
     credentials: {
       accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
       secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
     },
     endpoint: process.env.DYNAMODB_ENDPOINT
-  });
+  }));
   const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
   const vendorApiRepository = new VendorApiRepository();
   const vendorApi = new VendorApiClient(vendorApiRepository);

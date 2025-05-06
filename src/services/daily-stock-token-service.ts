@@ -1,6 +1,6 @@
 import { VendorApiClient } from './vendor/api-client';
 import { StockTokenRepository } from '../repositories/stock-token-repository';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDB } from '@aws-sdk/client-dynamodb';
 
 export class DailyStockTokenService {
   private isRunning = false;
@@ -13,10 +13,12 @@ export class DailyStockTokenService {
     // Initialize DynamoDB client for verifications
     this.dynamoDb = new DynamoDB({
       region: process.env.DYNAMODB_REGION || 'us-east-1',
+
       credentials: {
         accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
         secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
       },
+
       endpoint: process.env.DYNAMODB_ENDPOINT
     });
   }
@@ -28,11 +30,11 @@ export class DailyStockTokenService {
   public async checkTableExists(tableName: string): Promise<boolean> {
     try {
       console.log(`Checking if table ${tableName} exists...`);
-      await this.dynamoDb.describeTable({ TableName: tableName }).promise();
+      await this.dynamoDb.describeTable({ TableName: tableName });
       console.log(`¡Table ${tableName} exists!`);
       return true;
     } catch (error: any) {
-      if (error.code === 'ResourceNotFoundException') {
+      if (error.name === 'ResourceNotFoundException') {
         console.warn(`Table ${tableName} does not exist. Creating table...`);
         await this.createTable(tableName);
         return true;
@@ -59,13 +61,13 @@ export class DailyStockTokenService {
           ReadCapacityUnits: 5,
           WriteCapacityUnits: 5
         }
-      }).promise();
+      });
       
       // Esperar a que la tabla esté activa
       let tableActive = false;
       while (!tableActive) {
         console.log(`Waiting for table ${tableName} to become active...`);
-        const response = await this.dynamoDb.describeTable({ TableName: tableName }).promise();
+        const response = await this.dynamoDb.describeTable({ TableName: tableName });
         if (response.Table && response.Table.TableStatus === 'ACTIVE') {
           tableActive = true;
           console.log(`Table ${tableName} is now active`);

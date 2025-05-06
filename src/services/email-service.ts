@@ -1,4 +1,4 @@
-import * as AWS from 'aws-sdk';
+import { SendEmailCommandInput, SES } from '@aws-sdk/client-ses';
 import * as nodemailer from 'nodemailer';
 import { ReportData, EmailParams } from './service-types';
 
@@ -9,7 +9,7 @@ import { ReportData, EmailParams } from './service-types';
  * Soporta múltiples proveedores según el entorno (AWS SES o SMTP local)
  */
 export class EmailService {
-  private ses: AWS.SES | null = null;
+  private ses: SES | null = null;
   private transporter: nodemailer.Transporter | null = null;
   private readonly reportService: any; // ReportService
   
@@ -32,8 +32,11 @@ export class EmailService {
    */
   private initializeSES(): void {
     try {
-      this.ses = new AWS.SES({
+      this.ses = new SES({
         region: process.env.AWS_REGION || 'us-east-1',
+
+        // The key apiVersion is no longer supported in v3, and can be removed.
+        // @deprecated The client uses the "latest" apiVersion.
         apiVersion: '2010-12-01'
       });
       console.log('AWS SES client initialized successfully');
@@ -99,7 +102,7 @@ export class EmailService {
       throw new Error('Cliente SES no inicializado');
     }
     
-    const params: AWS.SES.SendEmailRequest = {
+    const params: SendEmailCommandInput = {
       Source: process.env.EMAIL_SENDER || 'reports@example.com',
       Destination: {
         ToAddresses: recipients
@@ -118,7 +121,7 @@ export class EmailService {
       }
     };
     
-    await this.ses.sendEmail(params).promise();
+    await this.ses.sendEmail(params);
   }
   
   /**

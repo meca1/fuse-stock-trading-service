@@ -9,7 +9,8 @@ import { TransactionRepository } from '../../repositories/transaction-repository
 import { UserRepository } from '../../repositories/user-repository';
 import { StockService } from '../../services/stock-service';
 import { DatabaseService } from '../../config/database';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
+import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
 import { VendorApiRepository } from '../../repositories/vendor-api-repository';
@@ -22,14 +23,14 @@ const getStockServiceInstance = () => {
   const { VendorApiClient } = require('../../services/vendor/api-client');
   const { VendorApiRepository } = require('../../repositories/vendor-api-repository');
   
-  const dynamoDb = new DynamoDB.DocumentClient({
+  const dynamoDb = DynamoDBDocument.from(new DynamoDB({
     region: process.env.DYNAMODB_REGION || 'us-east-1',
     credentials: {
       accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
       secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
     },
     endpoint: process.env.DYNAMODB_ENDPOINT
-  });
+  }));
   
   const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
   const vendorApiRepository = new VendorApiRepository();
@@ -91,13 +92,17 @@ const getPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGat
   const userRepository = new UserRepository(dbService);
   
   // Setup DynamoDB for cache service
-  const dynamoDb = new DynamoDB.DocumentClient({
+  const dynamoDb = DynamoDBDocument.from(new DynamoDB({
     region: process.env.DYNAMODB_REGION || 'us-east-1',
     credentials: {
       accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
       secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
     },
     endpoint: process.env.DYNAMODB_ENDPOINT
+  }), {
+    marshallOptions: {
+      removeUndefinedValues: true
+    }
   });
   
   // Create the cache service
