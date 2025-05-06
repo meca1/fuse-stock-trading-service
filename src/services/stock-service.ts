@@ -1,55 +1,14 @@
 import { VendorApiClient } from './vendor/api-client';
-import { VendorStock, ListStocksResponse, EnhancedVendorStock } from '../types/models/stock';
 import { StockTokenRepository } from '../repositories/stock-token-repository';
-
-// Configuración
-const CONFIG = {
-  CACHE_TTL: 300 * 1000, // 5 minutes in milliseconds
-  MAX_PAGES: 10,
-  PRICE_VARIATION_THRESHOLD: 0.02 // 2%
-} as const;
-
-// Errores específicos
-export class StockNotFoundError extends Error {
-  constructor(symbol: string) {
-    super(`Stock with symbol ${symbol} not found`);
-    this.name = 'StockNotFoundError';
-  }
-}
-
-export class InvalidPriceError extends Error {
-  constructor(currentPrice: number, requestedPrice: number) {
-    super(`Price must be within ${CONFIG.PRICE_VARIATION_THRESHOLD * 100}% of current price ($${currentPrice})`);
-    this.name = 'InvalidPriceError';
-  }
-}
-
-// Interfaces
-export interface ListedStock {
-  symbol: string;
-  name: string;
-  price: number;
-  currency: string;
-  lastUpdated: string | undefined;
-  market: string;
-  percentageChange?: number;
-  volume?: number;
-}
-
-export interface ListStocksResult {
-  stocks: ListedStock[];
-  nextToken?: string;
-  totalItems?: number;
-  lastUpdated?: string;
-}
-
-// Cache para almacenar resultados de stocks
-interface StockCache {
-  [symbol: string]: {
-    data: VendorStock;
-    timestamp: number;
-  }
-}
+import { 
+  VendorStock, 
+  EnhancedVendorStock, 
+  ListedStock, 
+  ListStocksResult, 
+  StockCache,
+  STOCK_CONFIG 
+} from '../types/models/stock';
+import { StockNotFoundError, InvalidPriceError } from '../types/errors/stock-errors';
 
 /**
  * Service to handle stock-related operations and token management
@@ -62,22 +21,6 @@ export class StockService {
     private stockTokenRepository: StockTokenRepository,
     private vendorApi: VendorApiClient
   ) {}
-
-  /**
-   * Gets the stock token repository instance
-   * @returns The stock token repository instance
-   */
-  public getStockTokenRepository(): StockTokenRepository {
-    return this.stockTokenRepository;
-  }
-
-  /**
-   * Gets the vendor API client instance
-   * @returns The vendor API client instance
-   */
-  public getVendorApi(): VendorApiClient {
-    return this.vendorApi;
-  }
 
   /**
    * Executes a stock purchase through the vendor API
@@ -96,7 +39,7 @@ export class StockService {
       }
       
       if (!this.isValidPrice(stock.price, price)) {
-        throw new InvalidPriceError(stock.price, price);
+        throw new InvalidPriceError(stock.price, price, STOCK_CONFIG.PRICE_VARIATION_THRESHOLD);
       }
       
       return await this.vendorApi.buyStock(symbol, { price, quantity });
@@ -157,7 +100,7 @@ export class StockService {
    */
   public isValidPrice(currentPrice: number, requestedPrice: number): boolean {
     const priceDiff = Number((Math.abs(requestedPrice - currentPrice)).toFixed(10));
-    const maxDiff = Number((currentPrice * CONFIG.PRICE_VARIATION_THRESHOLD).toFixed(10));
+    const maxDiff = Number((currentPrice * STOCK_CONFIG.PRICE_VARIATION_THRESHOLD).toFixed(10));
     return priceDiff <= maxDiff;
   }
 
@@ -191,7 +134,7 @@ export class StockService {
       const now = Date.now();
       const cachedStock = this.stockCache[symbol];
       
-      if (cachedStock && (now - cachedStock.timestamp) < CONFIG.CACHE_TTL) {
+      if (cachedStock && (now - cachedStock.timestamp) < STOCK_CONFIG.CACHE_TTL) {
         return cachedStock.data;
       }
       
@@ -250,32 +193,11 @@ export class StockService {
         currentToken = response.data.nextToken;
         pageCount++;
         
-      } while (currentToken && pageCount < CONFIG.MAX_PAGES);
+      } while (currentToken && pageCount < STOCK_CONFIG.MAX_PAGES);
       
       return null;
     } catch (error) {
       throw new Error(`Error getting stock ${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Gets the current price of a stock
-   * @param symbol Stock symbol
-   * @returns Object containing the current price
-   * @throws {StockNotFoundError} When the stock is not found
-   */
-  public async getCurrentPrice(symbol: string): Promise<{ price: number }> {
-    try {
-      const stock = await this.getStockBySymbol(symbol);
-      if (!stock) {
-        throw new StockNotFoundError(symbol);
-      }
-      return { price: stock.price };
-    } catch (error) {
-      if (error instanceof StockNotFoundError) {
-        throw error;
-      }
-      throw new Error(`Error getting current price for ${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -291,7 +213,7 @@ export class StockService {
       let nextToken: string | undefined = startToken;
       let pageCount = 0;
       do {
-        const response: ListStocksResponse = await this.vendorApi.listStocks(nextToken);
+        const response = await this.vendorApi.listStocks(nextToken);
         const stocksWithPagination: EnhancedVendorStock[] = response.data.items.map(stock => ({
           symbol: stock.symbol,
           name: stock.name,
@@ -312,8 +234,7 @@ export class StockService {
         nextToken
       };
     } catch (error) {
-      console.error('Error fetching vendor stocks:', error);
-      throw error;
+      throw new Error(`Error fetching vendor stocks: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }
