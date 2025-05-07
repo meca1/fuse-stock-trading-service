@@ -3,7 +3,8 @@ import { TransactionType, TransactionStatus } from '../../types/common/enums';
 import { PortfolioService } from '../../services/portfolio-service';
 import { PortfolioRepository } from '../../repositories/portfolio-repository';
 import { UserRepository } from '../../repositories/user-repository';
-import { StockService } from '../../services/stock-service';
+import { StockTokenRepository } from '../../repositories/stock-token-repository';
+import { VendorApiRepository } from '../../repositories/vendor-api-repository';
 import { IPortfolio } from '../../types/models/portfolio';
 import { DatabaseService } from '../../config/database';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
@@ -13,29 +14,40 @@ import { handleZodError } from '../../middleware/zod-error-handler';
 import { CacheService } from '../../services/cache-service';
 
 // We need to manually define service factory to fix the module not found error
-const getStockServiceInstance = (): StockService => {
-  // Import these inline to avoid circular dependencies
-  const { StockTokenRepository } = require('../../repositories/stock-token-repository');
-  const { VendorApiClient } = require('../../services/vendor/api-client');
-  const { VendorApiRepository } = require('../../repositories/vendor-api-repository');
+const getPortfolioServiceInstance = async (): Promise<PortfolioService> => {
+  const dbService = await DatabaseService.getInstance();
   
-  const stockTokenRepo = new StockTokenRepository(new CacheService({
+  const portfolioRepository = new PortfolioRepository(dbService);
+  const transactionRepository = new (require('../../repositories/transaction-repository').TransactionRepository)(dbService);
+  const userRepository = new UserRepository(dbService);
+  
+  // Initialize cache services
+  const portfolioCacheService = new CacheService({
+    tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
+    region: process.env.DYNAMODB_REGION || 'us-east-1',
+    accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+    secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+    endpoint: process.env.DYNAMODB_ENDPOINT
+  });
+
+  const stockTokenRepository = new StockTokenRepository(new CacheService({
     tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
     region: process.env.DYNAMODB_REGION || 'us-east-1',
     accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
     secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
     endpoint: process.env.DYNAMODB_ENDPOINT
   }));
+
   const vendorApiRepository = new VendorApiRepository();
-  const vendorApi = new VendorApiClient(vendorApiRepository);
-  
-  const stockService = new StockService(stockTokenRepo, vendorApi);
-  
-  // Verificar tabla de tokens en segundo plano (sin await)
-  stockService.checkTableExists(process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local')
-    .catch((err: any) => console.warn('Error checking token table:', err));
-  
-  return stockService;
+
+  return new PortfolioService(
+    portfolioRepository,
+    transactionRepository,
+    userRepository,
+    stockTokenRepository,
+    vendorApiRepository,
+    portfolioCacheService
+  );
 };
 
 /**
@@ -70,7 +82,7 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
   const paramsPromise = validateParams(event);
   
   // Inicializar los servicios mientras se validan los parámetros
-  const stockService = getStockServiceInstance();
+  const portfolioServicePromise = getPortfolioServiceInstance();
   
   // Inicializar database service en paralelo con la validación
   const dbServicePromise = DatabaseService.getInstance();
@@ -81,8 +93,8 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
     
     // Obtener información del stock y DB service en paralelo
     console.log('Fetching stock and database connection in parallel');
-    const [stockDetails, dbService] = await Promise.all([
-      stockService.getStockBySymbol(symbol),
+    const [portfolioService, dbService] = await Promise.all([
+      portfolioServicePromise,
       dbServicePromise
     ]);
     
@@ -93,7 +105,10 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
     
     // Verificar si el stock se encontró
     let errorReason = '';
-    if (!stockDetails) {
+    const stocksResponse = await portfolioService.vendorApiRepository.listStocks();
+    const stock = stocksResponse.data.items.find(item => item.symbol === symbol);
+    
+    if (!stock) {
       errorReason = `Stock with symbol ${symbol} not found`;
       // Registrar transacción fallida
       await registerFailedTransaction(
@@ -108,7 +123,7 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
     }
 
     // Procesamiento de precio
-    const numericCurrentPrice = Number(stockDetails.price);
+    const numericCurrentPrice = Number(stock.price);
     if (isNaN(numericCurrentPrice)) {
       errorReason = 'Invalid current price received from service';
       // Registrar transacción fallida
@@ -123,13 +138,15 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
       throw new AppError(errorReason, 500, 'INTERNAL_ERROR');
     }
     
-    // Validar precio (usando el método de validación del stock service)
-    if (!stockService.isValidPrice(numericCurrentPrice, price)) {
+    // Validar precio (2% de variación permitida)
+    const priceDiff = Number(Math.abs(numericCurrentPrice - price).toFixed(10));
+    const maxDiff = Number((numericCurrentPrice * 0.02).toFixed(10));
+    if (priceDiff > maxDiff) {
       const priceInfo = {
         requestedPrice: price,
         currentPrice: numericCurrentPrice,
-        difference: Math.abs(price - numericCurrentPrice),
-        maximumAllowed: numericCurrentPrice * 0.02
+        difference: priceDiff,
+        maximumAllowed: maxDiff
       };
       
       errorReason = `Price validation failed: ${JSON.stringify(priceInfo)}`;
@@ -143,7 +160,7 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
         errorReason
       );
       throw new ValidationError(
-        `Invalid price. Current price is $${numericCurrentPrice}. Your price must be within 2% ($${numericCurrentPrice * 0.02}) of the current price. Valid range: $${numericCurrentPrice * 0.98} - $${numericCurrentPrice * 1.02}`,
+        `Invalid price. Current price is $${numericCurrentPrice}. Your price must be within 2% ($${maxDiff}) of the current price. Valid range: $${(numericCurrentPrice * 0.98).toFixed(2)} - $${(numericCurrentPrice * 1.02).toFixed(2)}`,
         priceInfo
       );
     }
@@ -177,23 +194,6 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
         updated_at: new Date().toISOString()
       } as Omit<IPortfolio, 'id'>);
     }
-    
-    // Inicializar portfolio service con caché
-    const portfolioCacheService = new CacheService({
-      tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
-      region: process.env.DYNAMODB_REGION || 'us-east-1',
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-      endpoint: process.env.DYNAMODB_ENDPOINT
-    });
-
-    const portfolioService = new PortfolioService(
-      portfolioRepository,
-      transactionRepository,
-      userRepository,
-      stockService,
-      portfolioCacheService
-    );
     
     // Resolver el portfolio (esperar creación si fue necesario)
     const portfolio = (!portfolios || portfolios.length === 0) 

@@ -8,10 +8,11 @@ import {
 } from '../types/models/portfolio';
 import { ITransaction } from '../types/models/transaction';
 import { TransactionType, TransactionStatus } from '../types/common/enums';
-import { StockService } from './stock-service';
 import { UserRepository } from '../repositories/user-repository';
 import { CacheService } from './cache-service';
 import { DatabaseService } from '../config/database';
+import { StockTokenRepository } from '../repositories/stock-token-repository';
+import { VendorApiRepository } from '../repositories/vendor-api-repository';
 
 /**
  * Interface for standardized response with cache metadata
@@ -39,7 +40,6 @@ interface PortfolioServiceInitOptions {
  */
 export class PortfolioService {
   private cacheService: CacheService;
-  private stockService!: StockService; // Using definite assignment assertion
   private readonly CACHE_TTL = 300; // 5 minutes
   private isEnabled: boolean = true;
 
@@ -47,7 +47,8 @@ export class PortfolioService {
     private portfolioRepository: PortfolioRepository,
     private transactionRepository: TransactionRepository,
     private userRepository: UserRepository,
-    stockService?: StockService,
+    private stockTokenRepository: StockTokenRepository,
+    public vendorApiRepository: VendorApiRepository,
     cacheService?: CacheService
   ) {
     this.cacheService = cacheService || new CacheService({
@@ -57,10 +58,6 @@ export class PortfolioService {
       secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
       endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
     });
-
-    if (stockService) {
-      this.stockService = stockService;
-    }
     
     // Log configuration
     console.log('[PORTFOLIO CACHE] Initialized with configuration', {
@@ -68,15 +65,6 @@ export class PortfolioService {
       ttl: this.CACHE_TTL,
       isEnabled: this.isEnabled
     });
-  }
-
-  /**
-   * Initialize the service with required dependencies
-   */
-  private async initialize(): Promise<void> {
-    if (!this.stockService) {
-      this.stockService = await PortfolioService.createStockService();
-    }
   }
 
   /**
@@ -100,33 +88,8 @@ export class PortfolioService {
       endpoint: options.endpoint || process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
     });
 
-    // Initialize stock service
-    const stockService = await this.createStockService(options);
-
-    const service = new PortfolioService(
-      portfolioRepository,
-      transactionRepository,
-      userRepository,
-      stockService,
-      cacheService
-    );
-
-    await service.initialize();
-    return service;
-  }
-
-  /**
-   * Creates a new instance of StockService with required dependencies
-   * @param options Optional configuration for service initialization
-   * @returns Promise with initialized StockService instance
-   */
-  private static async createStockService(options: PortfolioServiceInitOptions = {}): Promise<StockService> {
-    const { StockService } = await import('./stock-service');
-    const { StockTokenRepository } = await import('../repositories/stock-token-repository');
-    const { VendorApiClient } = await import('./vendor/api-client');
-    const { VendorApiRepository } = await import('../repositories/vendor-api-repository');
-
-    const stockTokenRepo = new StockTokenRepository(new CacheService({
+    // Initialize stock token repository
+    const stockTokenRepository = new StockTokenRepository(new CacheService({
       tableName: options.stockTokensTable || process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
       region: options.region || process.env.DYNAMODB_REGION || 'local',
       accessKeyId: options.accessKeyId || process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
@@ -134,10 +97,17 @@ export class PortfolioService {
       endpoint: options.endpoint || process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
     }));
 
+    // Initialize vendor API repository
     const vendorApiRepository = new VendorApiRepository();
-    const vendorApi = new VendorApiClient(vendorApiRepository);
-    
-    return new StockService(stockTokenRepo, vendorApi);
+
+    return new PortfolioService(
+      portfolioRepository,
+      transactionRepository,
+      userRepository,
+      stockTokenRepository,
+      vendorApiRepository,
+      cacheService
+    );
   }
 
   /**
@@ -382,11 +352,12 @@ export class PortfolioService {
     try {
       // Primero verificamos que el stock existe y obtenemos su precio actual
       // Esto se hace en paralelo con la obtención del portfolio
-      const [stock, portfolio] = await Promise.all([
-        this.stockService.getStockBySymbol(symbol),
+      const [stocksResponse, portfolio] = await Promise.all([
+        this.vendorApiRepository.listStocks(),
         this.portfolioRepository.findById(portfolioId)
       ]);
 
+      const stock = stocksResponse.data.items.find(item => item.symbol === symbol);
       if (!stock) {
         throw new Error(`Stock with symbol ${symbol} not found`);
       }
@@ -395,13 +366,19 @@ export class PortfolioService {
         throw new Error(`Portfolio with ID ${portfolioId} not found`);
       }
 
-      // Validar el precio
-      if (!this.stockService.isValidPrice(stock.price, price)) {
-        throw new Error(`Price must be within 2% of current price ($${stock.price})`);
+      // Validar el precio (2% de variación permitida)
+      const numericCurrentPrice = Number(stock.price);
+      const priceDiff = Number(Math.abs(numericCurrentPrice - price).toFixed(10));
+      const maxDiff = Number((numericCurrentPrice * 0.02).toFixed(10));
+      
+      if (priceDiff > maxDiff) {
+        throw new Error(
+          `Invalid price. Current price is $${numericCurrentPrice}. Your price must be within 2% ($${maxDiff}) of the current price. Valid range: $${(numericCurrentPrice * 0.98).toFixed(2)} - $${(numericCurrentPrice * 1.02).toFixed(2)}`
+        );
       }
 
       // Ejecutar la compra a través de la API externa del proveedor
-      const buyResponse = await this.stockService.buyStock(symbol, price, quantity);
+      const buyResponse = await this.vendorApiRepository.buyStock(symbol, { price, quantity });
       
       if (buyResponse.status !== 200) {
         throw new Error(`Error buying stock: ${buyResponse.message}`);
