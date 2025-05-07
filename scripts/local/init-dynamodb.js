@@ -1,11 +1,13 @@
-const AWS = require('aws-sdk');
+const { DynamoDBClient, CreateTableCommand, DescribeTimeToLiveCommand, UpdateTimeToLiveCommand, ListTablesCommand } = require('@aws-sdk/client-dynamodb');
 
 // Configuration for Local DynamoDB
-const dynamodb = new AWS.DynamoDB({
-  endpoint: 'http://localhost:8000',
+const client = new DynamoDBClient({
+  endpoint: 'http://dynamodb:8000',
   region: 'us-east-1',
-  accessKeyId: 'local',
-  secretAccessKey: 'local',
+  credentials: {
+    accessKeyId: 'local',
+    secretAccessKey: 'local'
+  }
 });
 
 // Table definitions
@@ -54,11 +56,11 @@ const tables = [
 // Function to create a table
 async function createTable(params) {
   try {
-    await dynamodb.createTable(params).promise();
+    await client.send(new CreateTableCommand(params));
     console.log(`✅ Table ${params.TableName} created successfully`);
     return true;
   } catch (error) {
-    if (error.code === 'ResourceInUseException') {
+    if (error.name === 'ResourceInUseException') {
       console.log(`ℹ️  Table ${params.TableName} already exists`);
       return true;
     } else {
@@ -71,7 +73,7 @@ async function createTable(params) {
 // Function to check TTL status
 async function checkTTLStatus(tableName) {
   try {
-    const result = await dynamodb.describeTimeToLive({ TableName: tableName }).promise();
+    const result = await client.send(new DescribeTimeToLiveCommand({ TableName: tableName }));
     return result.TimeToLiveDescription.TimeToLiveStatus === 'ENABLED';
   } catch (error) {
     console.error(`❌ Error checking TTL for ${tableName}:`, error.message);
@@ -89,18 +91,18 @@ async function configureTTL(tableName) {
       return true;
     }
 
-    await dynamodb.updateTimeToLive({
+    await client.send(new UpdateTimeToLiveCommand({
       TableName: tableName,
       TimeToLiveSpecification: {
         AttributeName: 'ttl',
         Enabled: true
       }
-    }).promise();
+    }));
     
     console.log(`✅ TTL configured successfully for table ${tableName}`);
     return true;
   } catch (error) {
-    if (error.code === 'ValidationException' && error.message.includes('TimeToLive is already enabled')) {
+    if (error.name === 'ValidationException' && error.message.includes('TimeToLive is already enabled')) {
       console.log(`ℹ️  TTL is already enabled for table ${tableName}`);
       return true;
     }
@@ -113,7 +115,7 @@ async function configureTTL(tableName) {
 async function initializeDynamoDB() {
   try {
     // List existing tables
-    const existingTables = await dynamodb.listTables().promise();
+    const existingTables = await client.send(new ListTablesCommand());
     console.log('📋 Existing tables:', existingTables.TableNames.join(', '));
 
     // Create all tables
