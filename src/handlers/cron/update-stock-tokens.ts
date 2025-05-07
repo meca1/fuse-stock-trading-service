@@ -20,7 +20,9 @@ import { HTTP_HEADERS, HTTP_STATUS } from '../../constants/http';
 /**
  * Handler to update stock tokens
  */
-const updateStockTokensHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+const updateStockTokensHandler = async (
+  event: APIGatewayProxyEvent,
+): Promise<APIGatewayProxyResult> => {
   const stockService = await StockService.initialize();
   await stockService.updateStockTokens();
 
@@ -30,9 +32,9 @@ const updateStockTokensHandler = async (event: APIGatewayProxyEvent): Promise<AP
     body: JSON.stringify({
       status: 'success',
       data: {
-        message: 'Stock tokens updated successfully'
-      }
-    })
+        message: 'Stock tokens updated successfully',
+      },
+    }),
   };
 };
 
@@ -41,4 +43,4 @@ export const handler = middy(updateStockTokensHandler)
   .use(apiKeyValidator())
   .use(queryParamsValidator(updateStockTokensEventSchema))
   .use(httpErrorHandler())
-  .use(createResponseValidator(updateStockTokensResponseSchema)); 
+  .use(createResponseValidator(updateStockTokensResponseSchema));

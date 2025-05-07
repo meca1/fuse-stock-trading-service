@@ -1,15 +1,15 @@
 import { VendorApiClient } from './vendor/api-client';
 import { StockTokenRepository } from '../repositories/stock-token-repository';
 import { VendorApiRepository } from '../repositories/vendor-api-repository';
-import { 
-  VendorStock, 
-  EnhancedVendorStock, 
-  ListedStock, 
-  ListStocksResult, 
+import {
+  VendorStock,
+  EnhancedVendorStock,
+  ListedStock,
+  ListStocksResult,
   StockCache,
   STOCK_CONFIG,
   GetStocksWithCacheParams,
-  GetStocksWithCacheResult
+  GetStocksWithCacheResult,
 } from '../types/models/stock';
 import { StockNotFoundError, InvalidPriceError } from '../utils/errors/stock-errors';
 import { CacheService } from './cache-service';
@@ -25,7 +25,7 @@ export class StockService {
 
   constructor(
     private stockTokenRepo: StockTokenRepository,
-    private vendorApi: VendorApiClient
+    private vendorApi: VendorApiClient,
   ) {
     // Initialize CacheService for verifications
     this.cacheService = new CacheService({
@@ -33,7 +33,7 @@ export class StockService {
       region: process.env.DYNAMODB_REGION || 'us-east-1',
       accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
       secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-      endpoint: process.env.DYNAMODB_ENDPOINT
+      endpoint: process.env.DYNAMODB_ENDPOINT,
     });
   }
 
@@ -42,13 +42,15 @@ export class StockService {
    * @returns Promise with initialized StockService instance
    */
   public static async initialize(): Promise<StockService> {
-    const stockTokenRepo = new StockTokenRepository(new CacheService({
-      tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
-      region: process.env.DYNAMODB_REGION || 'local',
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-      endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
-    }));
+    const stockTokenRepo = new StockTokenRepository(
+      new CacheService({
+        tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
+        region: process.env.DYNAMODB_REGION || 'local',
+        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+        endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
+      }),
+    );
 
     const vendorApiRepository = new VendorApiRepository();
     const vendorApi = new VendorApiClient(vendorApiRepository);
@@ -71,17 +73,19 @@ export class StockService {
       if (!stock) {
         throw new StockNotFoundError(symbol);
       }
-      
+
       if (!this.isValidPrice(stock.price, price)) {
         throw new InvalidPriceError(stock.price, price, STOCK_CONFIG.PRICE_VARIATION_THRESHOLD);
       }
-      
+
       return await this.vendorApi.buyStock(symbol, { price, quantity });
     } catch (error) {
       if (error instanceof StockNotFoundError || error instanceof InvalidPriceError) {
         throw error;
       }
-      throw new Error(`Error buying stock ${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Error buying stock ${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -93,17 +97,21 @@ export class StockService {
    */
   async listAllStocks(nextToken?: string, search?: string): Promise<ListStocksResult> {
     try {
-      const { stocks: vendorStocks, nextToken: newNextToken } = await this.fetchAllVendorStocks(1, nextToken);
+      const { stocks: vendorStocks, nextToken: newNextToken } = await this.fetchAllVendorStocks(
+        1,
+        nextToken,
+      );
       let filteredStocks = vendorStocks;
-      
+
       if (search) {
         const searchLower = search.toLowerCase();
-        filteredStocks = vendorStocks.filter(s =>
-          s.symbol.toLowerCase().includes(searchLower) ||
-          (s.name && s.name.toLowerCase().includes(searchLower))
+        filteredStocks = vendorStocks.filter(
+          s =>
+            s.symbol.toLowerCase().includes(searchLower) ||
+            (s.name && s.name.toLowerCase().includes(searchLower)),
         );
       }
-      
+
       const stocks: ListedStock[] = filteredStocks.map(stock => ({
         symbol: stock.symbol,
         name: stock.name,
@@ -119,10 +127,12 @@ export class StockService {
         stocks,
         nextToken: newNextToken,
         totalItems: vendorStocks.length,
-        lastUpdated: stocks.length > 0 ? stocks[0].lastUpdated : undefined
+        lastUpdated: stocks.length > 0 ? stocks[0].lastUpdated : undefined,
       };
     } catch (error) {
-      throw new Error(`Error getting stock list: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Error getting stock list: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -133,7 +143,7 @@ export class StockService {
    * @returns true si el precio está dentro del rango permitido
    */
   public isValidPrice(currentPrice: number, requestedPrice: number): boolean {
-    const priceDiff = Number((Math.abs(requestedPrice - currentPrice)).toFixed(10));
+    const priceDiff = Number(Math.abs(requestedPrice - currentPrice).toFixed(10));
     const maxDiff = Number((currentPrice * STOCK_CONFIG.PRICE_VARIATION_THRESHOLD).toFixed(10));
     return priceDiff <= maxDiff;
   }
@@ -186,7 +196,7 @@ export class StockService {
 
     try {
       const tableName = process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local';
-      
+
       const tableExists = await this.checkTableExists(tableName);
       if (!tableExists) {
         throw new Error(`Table ${tableName} does not exist and could not be created`);
@@ -200,14 +210,14 @@ export class StockService {
         const response = await this.vendorApi.listStocks(currentToken);
         const stocks = response.data.items;
         const nextToken = response.data.nextToken;
-        
+
         // Process in larger batches to cover more stocks
         const batchSize = 25;
         for (let i = 0; i < stocks.length; i += batchSize) {
           const batch = stocks.slice(i, i + batchSize);
-          
+
           await Promise.all(
-            batch.map(async (stock) => {
+            batch.map(async stock => {
               if (!processedSymbols.has(stock.symbol)) {
                 try {
                   await this.stockTokenRepo.saveToken(stock.symbol, currentToken || '');
@@ -216,7 +226,7 @@ export class StockService {
                   failedSymbols.push(stock.symbol);
                 }
               }
-            })
+            }),
           );
         }
 
@@ -224,10 +234,14 @@ export class StockService {
       } while (currentToken);
 
       if (failedSymbols.length > 0) {
-        throw new Error(`Token update failed for ${failedSymbols.length} stocks: ${failedSymbols.join(', ')}`);
+        throw new Error(
+          `Token update failed for ${failedSymbols.length} stocks: ${failedSymbols.join(', ')}`,
+        );
       }
     } catch (error) {
-      throw new Error(`Error in stock token update: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Error in stock token update: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     } finally {
       this.isTokenUpdateRunning = false;
     }
@@ -242,31 +256,31 @@ export class StockService {
     try {
       const now = Date.now();
       const cachedStock = this.stockCache[symbol];
-      
-      if (cachedStock && (now - cachedStock.timestamp) < STOCK_CONFIG.CACHE_TTL) {
+
+      if (cachedStock && now - cachedStock.timestamp < STOCK_CONFIG.CACHE_TTL) {
         return cachedStock.data;
       }
-      
+
       const token = await this.stockTokenRepo.getToken(symbol);
-      
+
       if (token) {
         try {
           const response = await this.vendorApi.listStocks(token);
           const stock = response.data.items.find(item => item.symbol === symbol);
-          
+
           if (stock) {
             const vendorStock = {
               symbol: stock.symbol,
               name: stock.name,
               price: stock.price,
-              exchange: stock.exchange || 'NYSE'
+              exchange: stock.exchange || 'NYSE',
             };
-            
+
             this.stockCache[symbol] = {
               data: vendorStock,
-              timestamp: now
+              timestamp: now,
             };
-            
+
             return vendorStock;
           }
         } catch (error) {
@@ -276,37 +290,38 @@ export class StockService {
 
       let currentToken: string | undefined = undefined;
       let pageCount = 0;
-      
+
       do {
         const response = await this.vendorApi.listStocks(currentToken);
         const stock = response.data.items.find(item => item.symbol === symbol);
-        
+
         if (stock) {
           const vendorStock = {
             symbol: stock.symbol,
             name: stock.name,
             price: stock.price,
-            exchange: stock.exchange || 'NYSE'
+            exchange: stock.exchange || 'NYSE',
           };
-          
+
           await this.stockTokenRepo.saveToken(symbol, currentToken || '');
-          
+
           this.stockCache[symbol] = {
             data: vendorStock,
-            timestamp: now
+            timestamp: now,
           };
-          
+
           return vendorStock;
         }
-        
+
         currentToken = response.data.nextToken;
         pageCount++;
-        
       } while (currentToken && pageCount < STOCK_CONFIG.MAX_PAGES);
-      
+
       return null;
     } catch (error) {
-      throw new Error(`Error getting stock ${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Error getting stock ${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -316,7 +331,10 @@ export class StockService {
    * @param startToken Optional token to start pagination from
    * @returns Object containing list of vendor stocks and nextToken for pagination
    */
-  private async fetchAllVendorStocks(maxPages: number = 1, startToken?: string): Promise<{ stocks: EnhancedVendorStock[], nextToken?: string }> {
+  private async fetchAllVendorStocks(
+    maxPages: number = 1,
+    startToken?: string,
+  ): Promise<{ stocks: EnhancedVendorStock[]; nextToken?: string }> {
     try {
       let allStocks: EnhancedVendorStock[] = [];
       let nextToken: string | undefined = startToken;
@@ -329,7 +347,7 @@ export class StockService {
           price: stock.price,
           exchange: stock.exchange || 'NYSE',
           timestamp: stock.timestamp,
-          pageToken: response.data.nextToken || undefined
+          pageToken: response.data.nextToken || undefined,
         }));
         allStocks = [...allStocks, ...stocksWithPagination];
         nextToken = response.data.nextToken;
@@ -340,10 +358,12 @@ export class StockService {
       } while (nextToken);
       return {
         stocks: allStocks,
-        nextToken
+        nextToken,
       };
     } catch (error) {
-      throw new Error(`Error fetching vendor stocks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Error fetching vendor stocks: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -353,29 +373,32 @@ export class StockService {
    * @param search Optional search string for symbol or name
    * @returns Object containing stocks data and cache status
    */
-  public async getStocksWithCache(nextToken?: string, search?: string): Promise<{ data: ListStocksResult, cached: boolean }> {
+  public async getStocksWithCache(
+    nextToken?: string,
+    search?: string,
+  ): Promise<{ data: ListStocksResult; cached: boolean }> {
     // Generate cache key
     const baseKey = search ? `search:${search}` : 'all';
     const cacheKey = nextToken ? `${baseKey}:page:${nextToken}` : baseKey;
-    
+
     try {
       // Try to get from cache
       console.log(`Attempting to retrieve from cache: ${cacheKey}`);
       const cachedData = await this.cacheService.get<ListStocksResult>(cacheKey);
-      
+
       if (cachedData && Array.isArray(cachedData.stocks) && cachedData.stocks.length > 0) {
         console.log(`[CACHE HIT] Found data for key: ${cacheKey}`);
         return {
           data: cachedData,
-          cached: true
+          cached: true,
         };
       }
-      
+
       console.log(`[CACHE MISS] No data found for key: ${cacheKey}`);
-      
+
       // If not in cache, get from API
       const result = await this.listAllStocks(nextToken, search);
-      
+
       // Save to cache
       try {
         console.log(`[CACHE] Saving data for key: ${cacheKey}`);
@@ -384,10 +407,10 @@ export class StockService {
       } catch (err) {
         console.error(`[CACHE ERROR] Error saving data for key ${cacheKey}:`, err);
       }
-      
+
       return {
         data: result,
-        cached: false
+        cached: false,
       };
     } catch (err) {
       console.error(`[CACHE ERROR] Error retrieving data for key ${cacheKey}:`, err);
@@ -395,7 +418,7 @@ export class StockService {
       const result = await this.listAllStocks(nextToken, search);
       return {
         data: result,
-        cached: false
+        cached: false,
       };
     }
   }

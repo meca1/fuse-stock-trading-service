@@ -1,7 +1,5 @@
 import { VendorApiConfig } from '../services/vendor/types/vendor-api';
 
-
-
 /**
  * Default configuration for the Vendor API repository
  */
@@ -13,5 +11,5 @@ export const DEFAULT_VENDOR_API_CONFIG: VendorApiConfig = {
   initialRetryDelay: 1000,
   maxRetryDelay: 10000,
   circuitBreakerThreshold: 5,
-  circuitBreakerTimeout: 30000
-}; 
+  circuitBreakerTimeout: 30000,
+};

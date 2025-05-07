@@ -20,9 +20,11 @@ import { HTTP_HEADERS, HTTP_STATUS } from '../../constants/http';
 /**
  * Handler to get the portfolio summary for a user
  */
-const getPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+const getPortfoliosHandler = async (
+  event: APIGatewayProxyEvent,
+): Promise<APIGatewayProxyResult> => {
   const { userId } = event.pathParameters as { userId: string };
-  
+
   const portfolioService = await PortfolioService.initialize();
   const summary = await portfolioService.getUserPortfolioSummary(userId);
 
@@ -34,9 +36,9 @@ const getPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGat
       data: summary.data,
       metadata: {
         cached: summary.fromCache,
-        timestamp: summary.timestamp
-      }
-    })
+        timestamp: summary.timestamp,
+      },
+    }),
   };
 };
 

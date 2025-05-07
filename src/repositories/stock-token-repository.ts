@@ -1,14 +1,12 @@
 import { CacheService } from '../services/cache-service';
 
 export class StockTokenRepository {
-  constructor(
-    private cacheService: CacheService
-  ) {
+  constructor(private cacheService: CacheService) {
     console.log('StockTokenRepository initialized with:', {
       cacheServiceType: cacheService?.constructor?.name,
       hasSetMethod: typeof cacheService?.set === 'function',
       hasGetMethod: typeof cacheService?.get === 'function',
-      methods: Object.keys(cacheService || {})
+      methods: Object.keys(cacheService || {}),
     });
   }
 
@@ -21,11 +19,13 @@ export class StockTokenRepository {
     try {
       console.log(`[StockTokenRepository] Searching for token for ${symbol}...`, {
         cacheServiceType: this.cacheService?.constructor?.name,
-        hasGetMethod: typeof this.cacheService?.get === 'function'
+        hasGetMethod: typeof this.cacheService?.get === 'function',
       });
-      
-      const result = await this.cacheService.get<{ nextToken: string; lastUpdated: string }>(symbol);
-      
+
+      const result = await this.cacheService.get<{ nextToken: string; lastUpdated: string }>(
+        symbol,
+      );
+
       if (result?.nextToken) {
         console.log(`[StockTokenRepository] Token found for ${symbol}: ${result.nextToken}`);
         console.log(`[StockTokenRepository] Last update: ${result.lastUpdated || 'unknown'}`);
@@ -49,15 +49,15 @@ export class StockTokenRepository {
     try {
       const data = {
         nextToken,
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
       };
-      
+
       console.log(`[StockTokenRepository] Saving token for ${symbol}: ${nextToken}`, {
         cacheServiceType: this.cacheService?.constructor?.name,
         hasSetMethod: typeof this.cacheService?.set === 'function',
-        data
+        data,
       });
-      
+
       await this.cacheService.set(symbol, data);
       console.log(`[StockTokenRepository] Token successfully saved for ${symbol}`);
     } catch (error) {
@@ -65,4 +65,4 @@ export class StockTokenRepository {
       throw error;
     }
   }
-} 
+}

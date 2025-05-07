@@ -12,7 +12,7 @@ export class DatabaseError extends Error {
     message: string,
     public readonly code?: string,
     public readonly detail?: string,
-    public readonly originalError?: any
+    public readonly originalError?: any,
   ) {
     super(message);
     this.name = 'DatabaseError';
@@ -68,22 +68,22 @@ export class DatabaseService {
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000, // Increased to give more time for connection
       application_name: 'fuse-stock-trading-service',
-      statement_timeout: 30000 // 30 seconds max per query
+      statement_timeout: 30000, // 30 seconds max per query
     };
-    
+
     console.log(`Connecting to database at ${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    
+
     // Add SSL configuration for production
     if (process.env.NODE_ENV === 'production') {
       dbConfig.ssl = {
-        rejectUnauthorized: false
+        rejectUnauthorized: false,
       };
     }
-    
+
     // Create database pool
     this.pool = new Pool(dbConfig as PoolConfig);
-    
+
     // Log connection events in development
     if (process.env.NODE_ENV === 'development') {
       this.pool.on('connect', () => {
@@ -91,8 +91,8 @@ export class DatabaseService {
         this.isConnected = true;
       });
     }
-    
-    this.pool.on('error', (err) => {
+
+    this.pool.on('error', err => {
       console.error('Unexpected error on idle client', err);
       this.isConnected = false;
     });
@@ -121,12 +121,7 @@ export class DatabaseService {
       this.lastHealthCheck = new Date();
     } catch (error) {
       this.isConnected = false;
-      throw new DatabaseError(
-        'Failed to connect to database',
-        undefined,
-        undefined,
-        error
-      );
+      throw new DatabaseError('Failed to connect to database', undefined, undefined, error);
     }
   }
 
@@ -134,9 +129,9 @@ export class DatabaseService {
    * Execute a SQL query with parameters
    */
   public async query<T extends QueryResultRow = any>(
-    text: string, 
+    text: string,
     params?: any[],
-    options?: QueryOptions
+    options?: QueryOptions,
   ): Promise<QueryResult<T>> {
     // Check connection status
     if (!this.isConnected) {
@@ -151,7 +146,7 @@ export class DatabaseService {
     try {
       const queryConfig: any = {
         text,
-        values: params
+        values: params,
       };
 
       if (options?.timeout) {
@@ -165,19 +160,14 @@ export class DatabaseService {
       const start = Date.now();
       const res = await this.pool.query<T>(queryConfig);
       const duration = Date.now() - start;
-      
+
       if (process.env.NODE_ENV === 'development') {
         console.log('Executed query', { text, duration, rows: res.rowCount });
       }
-      
+
       return res;
     } catch (error: any) {
-      throw new DatabaseError(
-        'Error executing query',
-        error.code,
-        error.detail,
-        error
-      );
+      throw new DatabaseError('Error executing query', error.code, error.detail, error);
     }
   }
 
@@ -187,13 +177,13 @@ export class DatabaseService {
   public async getClient(): Promise<PoolClient> {
     const client = await this.pool.connect();
     const originalRelease = client.release;
-    
+
     // Monkey patch the release method to log query execution time
     client.release = () => {
       client.release = originalRelease;
       return client.release();
     };
-    
+
     return client;
   }
 
@@ -202,7 +192,7 @@ export class DatabaseService {
    */
   public async transaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.getClient();
-    
+
     try {
       await client.query('BEGIN');
       const result = await callback(client);
@@ -210,12 +200,7 @@ export class DatabaseService {
       return result;
     } catch (error: any) {
       await client.query('ROLLBACK');
-      throw new DatabaseError(
-        'Error executing transaction',
-        error.code,
-        error.detail,
-        error
-      );
+      throw new DatabaseError('Error executing transaction', error.code, error.detail, error);
     } finally {
       client.release();
     }
@@ -242,7 +227,7 @@ export class DatabaseService {
       idleCount: this.pool.idleCount,
       waitingCount: this.pool.waitingCount,
       isConnected: this.isConnected,
-      lastHealthCheck: this.lastHealthCheck
+      lastHealthCheck: this.lastHealthCheck,
     };
   }
 
@@ -267,7 +252,7 @@ export class DatabaseService {
    * @returns Array of query results
    */
   public async executeQueries(queries: { text: string; params?: any[] }[]): Promise<any[]> {
-    return this.transaction(async (client) => {
+    return this.transaction(async client => {
       const results = [];
       for (const query of queries) {
         const result = await client.query(query.text, query.params);

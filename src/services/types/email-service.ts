@@ -5,4 +5,4 @@ import { EmailParams } from '../models/shared';
  */
 export interface IEmailService {
   sendReportEmail(params: EmailParams): Promise<void>;
-} 
+}

@@ -34,17 +34,14 @@ export class PortfolioRepository {
   async findById(id: string): Promise<IPortfolio | null> {
     try {
       this.validatePortfolioId(id);
-      
-      const result = await this.db.query(
-        'SELECT * FROM portfolios WHERE id = $1',
-        [id]
-      );
+
+      const result = await this.db.query('SELECT * FROM portfolios WHERE id = $1', [id]);
       return result.rows[0] || null;
     } catch (error) {
       console.error('Error finding portfolio by ID:', error);
       throw new PortfolioRepositoryError(
         `Failed to find portfolio with ID ${id}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -55,17 +52,17 @@ export class PortfolioRepository {
   async findByUserId(userId: string): Promise<IPortfolio[]> {
     try {
       this.validateUserId(userId);
-      
+
       const result = await this.db.query(
         'SELECT * FROM portfolios WHERE user_id = $1 ORDER BY created_at DESC',
-        [userId]
+        [userId],
       );
       return result.rows;
     } catch (error) {
       console.error('Error finding portfolios by user ID:', error);
       throw new PortfolioRepositoryError(
         `Failed to find portfolios for user ${userId}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -73,24 +70,26 @@ export class PortfolioRepository {
   /**
    * Creates a new portfolio
    */
-  async create(portfolio: Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>): Promise<IPortfolio> {
+  async create(
+    portfolio: Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>,
+  ): Promise<IPortfolio> {
     try {
       this.validateUserId(portfolio.user_id);
-      
+
       if (!portfolio.name || portfolio.name.trim().length === 0) {
         throw new PortfolioRepositoryError('Portfolio name is required');
       }
 
       const result = await this.db.query(
         'INSERT INTO portfolios (user_id, name) VALUES ($1, $2) RETURNING *',
-        [portfolio.user_id, portfolio.name.trim()]
+        [portfolio.user_id, portfolio.name.trim()],
       );
       return result.rows[0];
     } catch (error) {
       console.error('Error creating portfolio:', error);
       throw new PortfolioRepositoryError(
         'Failed to create portfolio',
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -101,8 +100,9 @@ export class PortfolioRepository {
   async getPortfolioStockSummary(portfolioId: string): Promise<PortfolioStock[]> {
     try {
       this.validatePortfolioId(portfolioId);
-      
-      const result = await this.db.query(`
+
+      const result = await this.db.query(
+        `
         WITH stock_summary AS (
           SELECT 
             stock_symbol as symbol,
@@ -115,14 +115,16 @@ export class PortfolioRepository {
         SELECT * FROM stock_summary
         WHERE quantity > 0
         ORDER BY symbol
-      `, [portfolioId]);
-      
+      `,
+        [portfolioId],
+      );
+
       return result.rows;
     } catch (error) {
       console.error('Error getting portfolio stock summary:', error);
       throw new PortfolioRepositoryError(
         `Failed to get stock summary for portfolio ${portfolioId}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -133,20 +135,20 @@ export class PortfolioRepository {
   async updateValueAndTimestamp(id: string, value: number): Promise<void> {
     try {
       this.validatePortfolioId(id);
-      
+
       if (value < 0) {
         throw new PortfolioRepositoryError('Portfolio value cannot be negative');
       }
 
       await this.db.query(
         'UPDATE portfolios SET total_value = $1, updated_at = NOW() WHERE id = $2',
-        [value, id]
+        [value, id],
       );
     } catch (error) {
       console.error('Error updating portfolio value:', error);
       throw new PortfolioRepositoryError(
         `Failed to update portfolio value for portfolio ${id}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }

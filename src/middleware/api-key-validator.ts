@@ -12,7 +12,7 @@ export const apiKeyValidator = (): MiddlewareObj => {
       const event = request.event as APIGatewayProxyEvent;
       const apiKey = event.headers['x-api-key'] || event.headers['X-API-Key'];
       const apiKeyResult = apiKeySchema.safeParse(apiKey);
-      
+
       if (!apiKeyResult.success) {
         throw new AuthenticationError('Invalid API key format');
       }
@@ -20,6 +20,6 @@ export const apiKeyValidator = (): MiddlewareObj => {
       if (apiKey !== process.env.VENDOR_API_KEY) {
         throw new AuthenticationError('Invalid API key');
       }
-    }
+    },
   };
-}; 
+};

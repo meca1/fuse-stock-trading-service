@@ -22,7 +22,7 @@ import { HTTP_HEADERS, HTTP_STATUS } from '../../constants/http';
  */
 const listStocksHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const { nextToken, search } = event.queryStringParameters || {};
-  
+
   const stockService = await StockService.initialize();
   const { data: responseData, cached } = await stockService.getStocksWithCache(nextToken, search);
 
@@ -33,9 +33,9 @@ const listStocksHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewa
       status: 'success',
       data: responseData,
       metadata: {
-        cached
-      }
-    })
+        cached,
+      },
+    }),
   };
 };
 

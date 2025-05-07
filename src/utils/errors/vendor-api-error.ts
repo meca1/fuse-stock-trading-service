@@ -6,9 +6,9 @@ export class VendorApiException extends Error {
     message: string,
     public status?: number,
     public code?: string,
-    public retryable: boolean = false
+    public retryable: boolean = false,
   ) {
     super(message);
     this.name = 'VendorApiException';
   }
-} 
+}

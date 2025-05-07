@@ -24,25 +24,25 @@ import { HTTP_HEADERS, HTTP_STATUS } from '../../constants/http';
 const dailyReportHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const startTime = Date.now();
   const dateStr = event.queryStringParameters?.date || new Date().toISOString().split('T')[0];
-  
+
   try {
     // Initialize services
     const reportService = await ReportService.initialize();
     const emailService = await EmailService.initialize();
-    
+
     // Generate report
     const report = await reportService.generateDailyReport(dateStr);
-    
+
     // Send by email
     const recipients = process.env.REPORT_RECIPIENTS?.split(',') || ['admin@example.com'];
     await emailService.sendReportEmail({
       recipients,
       subject: `Daily Transaction Report - ${dateStr}`,
-      reportData: report
+      reportData: report,
     });
-    
+
     const executionTime = Date.now() - startTime;
-    
+
     return {
       statusCode: HTTP_STATUS.OK,
       headers: HTTP_HEADERS,
@@ -57,10 +57,10 @@ const dailyReportHandler = async (event: APIGatewayProxyEvent): Promise<APIGatew
             totalTransactions: report.totalTransactions,
             successfulTransactions: report.successfulTransactions.length,
             failedTransactions: report.failedTransactions.length,
-            totalAmount: report.totals.totalAmount
-          }
-        }
-      })
+            totalAmount: report.totals.totalAmount,
+          },
+        },
+      }),
     };
   } catch (error) {
     console.error('Error generating daily report:', error);
@@ -73,4 +73,4 @@ export const handler = middy(dailyReportHandler)
   .use(apiKeyValidator())
   .use(queryParamsValidator(dailyReportQuerySchema))
   .use(httpErrorHandler())
-  .use(createResponseValidator(dailyReportResponseSchema)); 
+  .use(createResponseValidator(dailyReportResponseSchema));

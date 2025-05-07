@@ -6,4 +6,4 @@ import { ReportData } from '../models/shared';
 export interface IReportService {
   generateDailyReport(date: string): Promise<ReportData>;
   formatReportAsHtml(reportData: ReportData): string;
-} 
+}

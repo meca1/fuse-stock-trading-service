@@ -19,7 +19,7 @@ describe('StockTokenRepository', () => {
       region: 'local',
       accessKeyId: 'local',
       secretAccessKey: 'local',
-      endpoint: 'http://localhost:8000'
+      endpoint: 'http://localhost:8000',
     }) as jest.Mocked<CacheService>;
 
     repo = new StockTokenRepository(mockCacheService);
@@ -27,7 +27,10 @@ describe('StockTokenRepository', () => {
 
   describe('getToken', () => {
     it('should return the token if found', async () => {
-      mockCacheService.get.mockResolvedValueOnce({ nextToken: 'abc', lastUpdated: new Date().toISOString() });
+      mockCacheService.get.mockResolvedValueOnce({
+        nextToken: 'abc',
+        lastUpdated: new Date().toISOString(),
+      });
       const token = await repo.getToken('AAPL');
       expect(token).toBe('abc');
       expect(mockCacheService.get).toHaveBeenCalledWith('AAPL');
@@ -52,19 +55,25 @@ describe('StockTokenRepository', () => {
     it('should save the token', async () => {
       mockCacheService.set.mockResolvedValueOnce();
       await repo.saveToken('AAPL', 'token123');
-      expect(mockCacheService.set).toHaveBeenCalledWith('AAPL', expect.objectContaining({
-        nextToken: 'token123',
-        lastUpdated: expect.any(String)
-      }));
+      expect(mockCacheService.set).toHaveBeenCalledWith(
+        'AAPL',
+        expect.objectContaining({
+          nextToken: 'token123',
+          lastUpdated: expect.any(String),
+        }),
+      );
     });
 
     it('should throw if CacheService set fails', async () => {
       mockCacheService.set.mockRejectedValueOnce(new Error('fail'));
       await expect(repo.saveToken('AAPL', 'token123')).rejects.toThrow('fail');
-      expect(mockCacheService.set).toHaveBeenCalledWith('AAPL', expect.objectContaining({
-        nextToken: 'token123',
-        lastUpdated: expect.any(String)
-      }));
+      expect(mockCacheService.set).toHaveBeenCalledWith(
+        'AAPL',
+        expect.objectContaining({
+          nextToken: 'token123',
+          lastUpdated: expect.any(String),
+        }),
+      );
     });
   });
-}); 
+});

@@ -31,26 +31,26 @@ describe('PortfolioService', () => {
       findById: jest.fn(),
       create: jest.fn(),
       updateValueAndTimestamp: jest.fn(),
-      getPortfolioStockSummary: jest.fn()
+      getPortfolioStockSummary: jest.fn(),
     } as any;
 
     transactionRepository = {
       create: jest.fn(),
-      findByPortfolioId: jest.fn()
+      findByPortfolioId: jest.fn(),
     } as any;
 
     userRepository = {
-      findById: jest.fn()
+      findById: jest.fn(),
     } as any;
 
     stockTokenRepository = {
       getToken: jest.fn(),
-      saveToken: jest.fn()
+      saveToken: jest.fn(),
     } as any;
 
     vendorApiRepository = {
       listStocks: jest.fn(),
-      buyStock: jest.fn()
+      buyStock: jest.fn(),
     } as any;
 
     // Create mock CacheService
@@ -61,16 +61,16 @@ describe('PortfolioService', () => {
       checkTableExists: jest.fn(),
       client: {} as any,
       docClient: {} as any,
-      tableName: 'test-table'
+      tableName: 'test-table',
     } as any;
-    
+
     service = new PortfolioService(
       portfolioRepository,
       transactionRepository,
       userRepository,
       stockTokenRepository,
       vendorApiRepository,
-      mockCacheService
+      mockCacheService,
     );
 
     // Mock console methods to avoid cluttering test output
@@ -90,8 +90,8 @@ describe('PortfolioService', () => {
           user_id: 'user1',
           name: 'Test Portfolio',
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
+          updated_at: new Date().toISOString(),
+        },
       ];
 
       portfolioRepository.findByUserId.mockResolvedValue(mockPortfolios);
@@ -108,7 +108,7 @@ describe('PortfolioService', () => {
         symbol: 'AAPL',
         name: 'Apple',
         price: 100,
-        exchange: 'NASDAQ'
+        exchange: 'NASDAQ',
       };
 
       const mockPortfolio: IPortfolio = {
@@ -116,7 +116,7 @@ describe('PortfolioService', () => {
         user_id: 'user1',
         name: 'Test Portfolio',
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
       const mockTransaction: ITransaction = {
@@ -129,31 +129,25 @@ describe('PortfolioService', () => {
         status: TransactionStatus.COMPLETED,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
       };
 
       vendorApiRepository.listStocks.mockResolvedValue({
         status: 200,
         data: {
           items: [mockStock],
-          nextToken: ''
-        }
+          nextToken: '',
+        },
       });
 
       portfolioRepository.findById.mockResolvedValue(mockPortfolio);
       vendorApiRepository.buyStock.mockResolvedValue({
         status: 200,
-        message: 'Success'
+        message: 'Success',
       });
       transactionRepository.create.mockResolvedValue(mockTransaction);
 
-      const result = await service.executeStockPurchase(
-        '1',
-        'AAPL',
-        10,
-        100,
-        TransactionType.BUY
-      );
+      const result = await service.executeStockPurchase('1', 'AAPL', 10, 100, TransactionType.BUY);
 
       expect(result).toEqual(mockTransaction);
       expect(transactionRepository.create).toHaveBeenCalled();
@@ -172,49 +166,51 @@ describe('PortfolioService', () => {
   it('getUserPortfolioSummary returns summary with zero if no portfolios', async () => {
     portfolioRepository.findByUserId.mockResolvedValue([]);
     const result = await service.getUserPortfolioSummary('u1');
-    
+
     expect(result.data.totalValue).toBe(0);
     expect(result.data.stocks).toEqual([]);
   });
 
   it('getPortfolioSummary returns summary with stocks', async () => {
-    portfolioRepository.findById.mockResolvedValue({ 
-      id: '1', 
-      user_id: 'u1', 
-      name: 'Test' 
+    portfolioRepository.findById.mockResolvedValue({
+      id: '1',
+      user_id: 'u1',
+      name: 'Test',
     } as IPortfolio);
-    
+
     portfolioRepository.getPortfolioStockSummary.mockResolvedValue([
-      { symbol: 'AAPL', quantity: 2, total_cost: 200 }
+      { symbol: 'AAPL', quantity: 2, total_cost: 200 },
     ]);
-    
+
     stockTokenRepository.getToken.mockResolvedValue('token123');
-    
+
     vendorApiRepository.listStocks.mockResolvedValue({
       status: 200,
       data: {
-        items: [{
-          symbol: 'AAPL',
-          name: 'Apple',
-          price: 150,
-          exchange: 'NASDAQ'
-        }],
-        nextToken: 'next'
-      }
+        items: [
+          {
+            symbol: 'AAPL',
+            name: 'Apple',
+            price: 150,
+            exchange: 'NASDAQ',
+          },
+        ],
+        nextToken: 'next',
+      },
     });
-    
+
     portfolioRepository.updateValueAndTimestamp.mockResolvedValue();
-    
+
     const result = await service.getPortfolioSummary('1');
     expect(result.data.stocks.length).toBe(1);
     expect(result.data.totalValue).toBeGreaterThan(0);
   });
 
   it('getPortfolioValue returns totalValue', async () => {
-    service.getPortfolioSummary = jest.fn().mockResolvedValue({ 
+    service.getPortfolioSummary = jest.fn().mockResolvedValue({
       data: { totalValue: 123 },
       fromCache: false,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
     const result = await service.getPortfolioValue('1');
     expect(result).toBe(123);
@@ -227,9 +223,9 @@ describe('PortfolioService', () => {
         totalValue: 1000,
         currency: 'USD',
         lastUpdated: new Date().toISOString(),
-        stocks: []
+        stocks: [],
       },
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
 
     it('should cache portfolio summary', async () => {
@@ -238,7 +234,7 @@ describe('PortfolioService', () => {
       expect(mockCacheService.set).toHaveBeenCalledWith(
         'portfolio:id:1',
         mockData,
-        expect.any(Number)
+        expect.any(Number),
       );
     });
 
@@ -255,4 +251,4 @@ describe('PortfolioService', () => {
       expect(mockCacheService.delete).toHaveBeenCalledWith('portfolio:id:1');
     });
   });
-}); 
+});

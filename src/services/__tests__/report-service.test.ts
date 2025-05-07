@@ -22,7 +22,7 @@ describe('ReportService', () => {
           status: TransactionStatus.COMPLETED,
           date: mockDate,
           created_at: mockDate,
-          updated_at: mockDate
+          updated_at: mockDate,
         },
         {
           id: '2',
@@ -34,7 +34,7 @@ describe('ReportService', () => {
           status: TransactionStatus.FAILED,
           date: mockDate,
           created_at: mockDate,
-          updated_at: mockDate
+          updated_at: mockDate,
         },
         {
           id: '3',
@@ -46,9 +46,9 @@ describe('ReportService', () => {
           status: TransactionStatus.COMPLETED,
           date: mockDate,
           created_at: mockDate,
-          updated_at: mockDate
-        }
-      ])
+          updated_at: mockDate,
+        },
+      ]),
     } as any;
 
     reportService = new ReportService(mockTransactionRepository);
@@ -80,7 +80,7 @@ describe('ReportService', () => {
           status: TransactionStatus.COMPLETED,
           date: mockDate,
           created_at: mockDate,
-          updated_at: mockDate
+          updated_at: mockDate,
         },
         {
           id: '3',
@@ -92,8 +92,8 @@ describe('ReportService', () => {
           status: TransactionStatus.COMPLETED,
           date: mockDate,
           created_at: mockDate,
-          updated_at: mockDate
-        }
+          updated_at: mockDate,
+        },
       ],
       failedTransactions: [
         {
@@ -106,34 +106,34 @@ describe('ReportService', () => {
           status: TransactionStatus.FAILED,
           date: mockDate,
           created_at: mockDate,
-          updated_at: mockDate
-        }
+          updated_at: mockDate,
+        },
       ],
       summaryBySymbol: {
         AAPL: {
           total: 1,
           successful: 1,
           failed: 0,
-          totalAmount: 1500
+          totalAmount: 1500,
         },
         GOOGL: {
           total: 1,
           successful: 0,
           failed: 1,
-          totalAmount: 1000
+          totalAmount: 1000,
         },
         MSFT: {
           total: 1,
           successful: 1,
           failed: 0,
-          totalAmount: 2400
-        }
+          totalAmount: 2400,
+        },
       },
       totals: {
         successfulAmount: 3900,
         failedAmount: 1000,
-        totalAmount: 4900
-      }
+        totalAmount: 4900,
+      },
     };
 
     const html = reportService.formatReportAsHtml(mockReportData);

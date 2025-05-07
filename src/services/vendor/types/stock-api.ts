@@ -38,7 +38,7 @@ export interface BuyStockResponse {
       quantity: number;
       price: number;
       total: number;
-    }
+    };
   };
 }
 
@@ -47,4 +47,4 @@ export interface VendorApiError {
   status: number;
   message: string;
   code?: string;
-} 
+}

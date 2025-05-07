@@ -7,7 +7,7 @@ describe('VendorApiClient', () => {
   beforeEach(() => {
     repo = {
       listStocks: jest.fn(),
-      buyStock: jest.fn()
+      buyStock: jest.fn(),
     };
     client = new VendorApiClient(repo);
   });
@@ -27,17 +27,17 @@ describe('VendorApiClient', () => {
 
   describe('buyStock', () => {
     it('should return buy response', async () => {
-      repo.buyStock.mockResolvedValue({ 
-        status: 200, 
+      repo.buyStock.mockResolvedValue({
+        status: 200,
         message: 'Success',
-        data: { 
-          order: { 
-            symbol: 'AAPL', 
-            price: 100, 
-            quantity: 1, 
-            total: 100 
-          } 
-        } 
+        data: {
+          order: {
+            symbol: 'AAPL',
+            price: 100,
+            quantity: 1,
+            total: 100,
+          },
+        },
       });
       const result = await client.buyStock('AAPL', { price: 100, quantity: 1 });
       expect(result.data?.order?.symbol).toBe('AAPL');
@@ -48,4 +48,4 @@ describe('VendorApiClient', () => {
       await expect(client.buyStock('AAPL', { price: 100, quantity: 1 })).rejects.toThrow('fail');
     });
   });
-}); 
+});

@@ -8,7 +8,7 @@ describe('UserRepository', () => {
 
   beforeEach(() => {
     dbService = {
-      query: jest.fn()
+      query: jest.fn(),
     } as any;
     repo = new UserRepository(dbService);
   });
@@ -18,7 +18,7 @@ describe('UserRepository', () => {
     command: '',
     rowCount: rows.length,
     oid: 0,
-    fields: []
+    fields: [],
   });
 
   describe('findById', () => {
@@ -35,4 +35,4 @@ describe('UserRepository', () => {
       expect(result).toBeNull();
     });
   });
-}); 
+});

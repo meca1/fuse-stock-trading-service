@@ -3,7 +3,7 @@
  */
 export enum TransactionType {
   BUY = 'BUY',
-  SELL = 'SELL'
+  SELL = 'SELL',
 }
 
 /**
@@ -13,5 +13,5 @@ export enum TransactionStatus {
   PENDING = 'PENDING',
   COMPLETED = 'COMPLETED',
   FAILED = 'FAILED',
-  CANCELLED = 'CANCELLED'
-} 
+  CANCELLED = 'CANCELLED',
+}

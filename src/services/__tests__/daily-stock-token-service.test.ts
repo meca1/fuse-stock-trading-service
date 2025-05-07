@@ -7,13 +7,13 @@ describe('StockService', () => {
 
   beforeEach(() => {
     repo = {
-      saveToken: jest.fn()
+      saveToken: jest.fn(),
     };
     vendor = {
-      listStocks: jest.fn()
+      listStocks: jest.fn(),
     };
     service = new StockService(repo, vendor);
-    
+
     // Mock checkTableExists to always return true in tests
     service.checkTableExists = jest.fn().mockResolvedValue(true);
   });
@@ -40,5 +40,3 @@ describe('StockService', () => {
     expect((service as any).isTokenUpdateRunning).toBe(false);
   });
 });
-
-    

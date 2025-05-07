@@ -14,7 +14,7 @@ export const queryParamsValidator = (schema: ZodSchema) => {
         if (request.event.pathParameters) {
           const validatedParams = schema.parse(request.event.pathParameters);
           request.event.pathParameters = validatedParams;
-        } 
+        }
         // If query parameters exist, validate them
         else if (request.event.queryStringParameters) {
           const validatedParams = schema.parse(request.event.queryStringParameters);
@@ -33,6 +33,6 @@ export const queryParamsValidator = (schema: ZodSchema) => {
         }
         throw new ValidationError('Invalid parameters', { error });
       }
-    }
+    },
   };
-}; 
+};

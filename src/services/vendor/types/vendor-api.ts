@@ -18,4 +18,4 @@ export interface VendorApiConfig {
   circuitBreakerThreshold: number;
   /** Time in milliseconds before the circuit breaker resets */
   circuitBreakerTimeout: number;
-} 
+}

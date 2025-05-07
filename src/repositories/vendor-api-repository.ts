@@ -1,29 +1,34 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
-import { ListStocksResponse, BuyStockParams, BuyStockResponse, VendorApiError } from '../services/vendor/types/stock-api';
+import {
+  ListStocksResponse,
+  BuyStockParams,
+  BuyStockResponse,
+  VendorApiError,
+} from '../services/vendor/types/stock-api';
 import { VendorApiConfig } from '../services/vendor/types/vendor-api';
 import { DEFAULT_VENDOR_API_CONFIG } from '../config/vendor-api';
 import { VendorApiException } from '../utils/errors/vendor-api-error';
 
 /**
  * Repository for interacting with the external stock API (Vendor).
- * 
+ *
  * This repository provides methods for:
  * - Listing available stocks with pagination
  * - Executing stock purchases
- * 
+ *
  * Implemented features:
  * - Circuit breaker to prevent cascading failures
  * - Exponential backoff retry for 500 errors
  * - Input parameter validation
  * - Typed error handling
- * 
+ *
  * @example
  * ```typescript
  * const repo = new VendorApiRepository();
- * 
+ *
  * // List stocks
  * const stocks = await repo.listStocks();
- * 
+ *
  * // Buy stocks
  * const purchase = await repo.buyStock('AAPL', { price: 150, quantity: 10 });
  * ```
@@ -88,7 +93,7 @@ export class VendorApiRepository {
   private async delay(attempt: number): Promise<void> {
     const delay = Math.min(
       this.config.initialRetryDelay * Math.pow(2, attempt - 1),
-      this.config.maxRetryDelay
+      this.config.maxRetryDelay,
     );
     await new Promise(resolve => setTimeout(resolve, delay));
   }
@@ -104,12 +109,7 @@ export class VendorApiRepository {
         this.circuitOpen = false;
         this.failureCount = 0;
       } else {
-        throw new VendorApiException(
-          'Circuit breaker is open',
-          503,
-          'CIRCUIT_OPEN',
-          true
-        );
+        throw new VendorApiException('Circuit breaker is open', 503, 'CIRCUIT_OPEN', true);
       }
     }
   }
@@ -145,30 +145,33 @@ export class VendorApiRepository {
     method: 'get' | 'post',
     url: string,
     config?: AxiosRequestConfig,
-    data?: any
+    data?: any,
   ): Promise<T> {
     this.checkCircuitBreaker();
 
     let lastError: any;
-    
+
     for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
       try {
-        console.log(`Making ${method.toUpperCase()} request to ${url}, attempt ${attempt}/${this.config.maxRetries}`);
-        
-        const response = method === 'get'
-          ? await this.client.get(url, config)
-          : await this.client.post(url, data, config);
+        console.log(
+          `Making ${method.toUpperCase()} request to ${url}, attempt ${attempt}/${this.config.maxRetries}`,
+        );
+
+        const response =
+          method === 'get'
+            ? await this.client.get(url, config)
+            : await this.client.post(url, data, config);
 
         this.recordSuccess();
         return response.data;
       } catch (error) {
         lastError = error;
-        
+
         if (axios.isAxiosError(error) && error.response) {
           const axiosError = error as AxiosError;
           const status = axiosError.response?.status;
           const errorData = axiosError.response?.data as VendorApiError;
-          
+
           // Log detailed error information
           console.error('API request failed', {
             url,
@@ -176,7 +179,7 @@ export class VendorApiRepository {
             status,
             errorCode: errorData?.code,
             errorMessage: errorData?.message,
-            attempt
+            attempt,
           });
 
           // Handle different error scenarios
@@ -189,26 +192,21 @@ export class VendorApiRepository {
           }
 
           if (errorData?.message) {
-            throw new VendorApiException(
-              errorData.message,
-              status,
-              errorData.code,
-              status === 500
-            );
+            throw new VendorApiException(errorData.message, status, errorData.code, status === 500);
           }
         }
-        
+
         break;
       }
     }
-    
+
     throw lastError;
   }
 
   /**
    * Gets the list of available stocks from the external provider.
    * The response includes the current price for each stock.
-   * 
+   *
    * @param nextToken Optional pagination token to get more results
    * @returns Promise with the API response including the list of stocks and nextToken
    * @throws VendorApiException if there's an error communicating with the API
@@ -223,7 +221,7 @@ export class VendorApiRepository {
 
   /**
    * Executes a stock purchase through the external API.
-   * 
+   *
    * @param symbol Stock symbol to buy
    * @param params Purchase parameters (price and quantity)
    * @returns Promise with the purchase response
@@ -235,12 +233,7 @@ export class VendorApiRepository {
    */
   async buyStock(symbol: string, params: BuyStockParams): Promise<BuyStockResponse> {
     this.validateInput(symbol, params);
-    
-    return this.makeRequest<BuyStockResponse>(
-      'post',
-      `/stocks/${symbol}/buy`,
-      undefined,
-      params
-    );
+
+    return this.makeRequest<BuyStockResponse>('post', `/stocks/${symbol}/buy`, undefined, params);
   }
-} 
+}

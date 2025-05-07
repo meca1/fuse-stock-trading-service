@@ -1,5 +1,10 @@
 import { VendorApiRepository } from '../../repositories/vendor-api-repository';
-import { ListStocksResponse, BuyStockParams, BuyStockResponse, VendorApiError } from './types/stock-api';
+import {
+  ListStocksResponse,
+  BuyStockParams,
+  BuyStockResponse,
+  VendorApiError,
+} from './types/stock-api';
 
 /**
  * Cliente para interactuar con la API del proveedor de stocks

@@ -8,7 +8,7 @@ describe('TransactionRepository', () => {
 
   beforeEach(() => {
     dbService = {
-      query: jest.fn()
+      query: jest.fn(),
     } as any;
     repo = new TransactionRepository(dbService);
   });
@@ -18,7 +18,7 @@ describe('TransactionRepository', () => {
     command: '',
     rowCount: rows.length,
     oid: 0,
-    fields: []
+    fields: [],
   });
 
   describe('create', () => {
@@ -30,7 +30,7 @@ describe('TransactionRepository', () => {
         quantity: 10,
         price: 150,
         status: 'COMPLETED',
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
       } as any;
       const mockTransaction = { id: 1, ...input } as ITransaction;
       dbService.query.mockResolvedValue(mockQueryResult([mockTransaction]));
@@ -39,4 +39,4 @@ describe('TransactionRepository', () => {
       expect(dbService.query).toHaveBeenCalled();
     });
   });
-}); 
+});

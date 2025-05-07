@@ -8,14 +8,11 @@ export const createResponseValidator = (schema: z.ZodType) => ({
       schema.parse(response);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        throw new AppError(
-          'Invalid response format',
-          500,
-          'RESPONSE_VALIDATION_ERROR',
-          { details: error.errors }
-        );
+        throw new AppError('Invalid response format', 500, 'RESPONSE_VALIDATION_ERROR', {
+          details: error.errors,
+        });
       }
       throw error;
     }
-  }
-}); 
+  },
+});

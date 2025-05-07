@@ -30,58 +30,56 @@ export class ReportService implements IReportService {
     try {
       // Get all transactions for the date
       const transactions = await this.transactionRepository.findByDate(date);
-      
+
       // Separate successful and failed transactions
       const successfulTransactions = transactions.filter(
-        t => t.status === TransactionStatus.COMPLETED
+        t => t.status === TransactionStatus.COMPLETED,
       );
-      
-      const failedTransactions = transactions.filter(
-        t => t.status === TransactionStatus.FAILED
-      );
-      
+
+      const failedTransactions = transactions.filter(t => t.status === TransactionStatus.FAILED);
+
       // Create summary by symbol
       const summaryBySymbol: ReportData['summaryBySymbol'] = {};
-      
+
       // Initialize totals
       let successfulAmount = 0;
       let failedAmount = 0;
-      
+
       // Process each transaction for the summary
       transactions.forEach(transaction => {
         const symbol = transaction.stock_symbol;
         const amount = transaction.quantity * transaction.price;
         const isSuccessful = transaction.status === TransactionStatus.COMPLETED;
-        
+
         // Update totals
         if (isSuccessful) {
           successfulAmount += amount;
         } else {
           failedAmount += amount;
         }
-        
+
         // Initialize the symbol summary if it doesn't exist
         if (!summaryBySymbol[symbol]) {
           summaryBySymbol[symbol] = {
             total: 0,
             successful: 0,
             failed: 0,
-            totalAmount: 0
+            totalAmount: 0,
           };
         }
-        
+
         // Update symbol summary
         const symbolSummary = summaryBySymbol[symbol];
         symbolSummary.total += 1;
         symbolSummary.totalAmount += amount;
-        
+
         if (isSuccessful) {
           symbolSummary.successful += 1;
         } else {
           symbolSummary.failed += 1;
         }
       });
-      
+
       // Generate final report data
       return {
         date,
@@ -92,23 +90,30 @@ export class ReportService implements IReportService {
         totals: {
           successfulAmount,
           failedAmount,
-          totalAmount: successfulAmount + failedAmount
-        }
+          totalAmount: successfulAmount + failedAmount,
+        },
       };
     } catch (error) {
       console.error(`Error generating report for ${date}:`, error);
       throw error;
     }
   }
-  
+
   /**
    * Formats the report data as HTML for email sending
    * @param reportData Report data
    * @returns Formatted HTML
    */
   formatReportAsHtml(reportData: ReportData): string {
-    const { date, totalTransactions, successfulTransactions, failedTransactions, summaryBySymbol, totals } = reportData;
-    
+    const {
+      date,
+      totalTransactions,
+      successfulTransactions,
+      failedTransactions,
+      summaryBySymbol,
+      totals,
+    } = reportData;
+
     // Generate rows for the symbol summary table
     const symbolRows = Object.entries(summaryBySymbol)
       .map(([symbol, data]) => {
@@ -125,7 +130,7 @@ export class ReportService implements IReportService {
         `;
       })
       .join('');
-    
+
     // Failed transactions table
     const failedRows = failedTransactions
       .map((t: ITransaction) => {
@@ -141,7 +146,7 @@ export class ReportService implements IReportService {
         `;
       })
       .join('');
-    
+
     // Generate complete HTML
     return `
       <!DOCTYPE html>
@@ -189,7 +194,10 @@ export class ReportService implements IReportService {
         </table>
         
         <h2>Failed Transactions</h2>
-        ${failedTransactions.length === 0 ? '<p>No failed transactions for this date.</p>' : `
+        ${
+          failedTransactions.length === 0
+            ? '<p>No failed transactions for this date.</p>'
+            : `
         <table>
           <thead>
             <tr>
@@ -205,7 +213,8 @@ export class ReportService implements IReportService {
             ${failedRows}
           </tbody>
         </table>
-        `}
+        `
+        }
         
         <p style="margin-top: 30px; font-size: 12px; color: #666;">
           This is an automatically generated report. Please do not reply to this email.
@@ -214,4 +223,4 @@ export class ReportService implements IReportService {
       </html>
     `;
   }
-} 
+}

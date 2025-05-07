@@ -10,7 +10,9 @@ export class TransactionRepository {
   /**
    * Creates a new transaction
    */
-  async create(transaction: Omit<ITransaction, 'id' | 'created_at' | 'updated_at'>): Promise<ITransaction> {
+  async create(
+    transaction: Omit<ITransaction, 'id' | 'created_at' | 'updated_at'>,
+  ): Promise<ITransaction> {
     try {
       const result = await this.db.query(
         `INSERT INTO transactions 
@@ -25,8 +27,8 @@ export class TransactionRepository {
           transaction.price,
           transaction.status,
           transaction.notes,
-          transaction.date
-        ]
+          transaction.date,
+        ],
       );
       return result.rows[0];
     } catch (error) {
@@ -40,10 +42,9 @@ export class TransactionRepository {
    */
   async findByDate(date: string): Promise<ITransaction[]> {
     try {
-      const result = await this.db.query(
-        'SELECT * FROM transactions WHERE DATE(date) = DATE($1)',
-        [date]
-      );
+      const result = await this.db.query('SELECT * FROM transactions WHERE DATE(date) = DATE($1)', [
+        date,
+      ]);
       return result.rows;
     } catch (error) {
       console.error('Error finding transactions by date:', error);
@@ -56,10 +57,9 @@ export class TransactionRepository {
    */
   async findByPortfolioId(portfolioId: string): Promise<ITransaction[]> {
     try {
-      const result = await this.db.query(
-        'SELECT * FROM transactions WHERE portfolio_id = $1',
-        [portfolioId]
-      );
+      const result = await this.db.query('SELECT * FROM transactions WHERE portfolio_id = $1', [
+        portfolioId,
+      ]);
       return result.rows;
     } catch (error) {
       console.error('Error finding transactions by portfolio ID:', error);

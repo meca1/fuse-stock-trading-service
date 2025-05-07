@@ -14,7 +14,7 @@ export interface ReportData {
       successful: number;
       failed: number;
       totalAmount: number;
-    }
+    };
   };
   totals: {
     successfulAmount: number;
@@ -30,4 +30,4 @@ export interface EmailParams {
   recipients: string[];
   subject: string;
   reportData: ReportData;
-} 
+}

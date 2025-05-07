@@ -91,4 +91,4 @@ export interface CachedUserPortfolioSummary {
     }[];
   };
   timestamp: string;
-} 
+}

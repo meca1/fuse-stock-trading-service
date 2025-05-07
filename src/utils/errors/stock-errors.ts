@@ -16,4 +16,4 @@ export class InvalidPriceError extends Error {
     super(`Price must be within ${threshold * 100}% of current price ($${currentPrice})`);
     this.name = 'InvalidPriceError';
   }
-} 
+}

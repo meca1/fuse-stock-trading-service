@@ -51,7 +51,7 @@ export interface StockCache {
   [symbol: string]: {
     data: VendorStock;
     timestamp: number;
-  }
+  };
 }
 
 /**
@@ -60,7 +60,7 @@ export interface StockCache {
 export const STOCK_CONFIG = {
   CACHE_TTL: 300 * 1000, // 5 minutes in milliseconds
   MAX_PAGES: 10,
-  PRICE_VARIATION_THRESHOLD: 0.02 // 2%
+  PRICE_VARIATION_THRESHOLD: 0.02, // 2%
 } as const;
 
 /**
@@ -79,4 +79,4 @@ export interface GetStocksWithCacheParams {
 export interface GetStocksWithCacheResult {
   data: ListStocksResult;
   cached: boolean;
-} 
+}

@@ -15,4 +15,4 @@ export interface ITransaction {
   date: string;
   created_at?: string;
   updated_at?: string;
-} 
+}

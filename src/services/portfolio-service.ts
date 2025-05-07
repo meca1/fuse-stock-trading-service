@@ -1,10 +1,10 @@
 import { PortfolioRepository } from '../repositories/portfolio-repository';
 import { TransactionRepository } from '../repositories/transaction-repository';
-import { 
-  IPortfolio, 
+import {
+  IPortfolio,
   PortfolioSummaryResponse,
   CachedPortfolioSummary,
-  CachedUserPortfolioSummary
+  CachedUserPortfolioSummary,
 } from '../types/models/portfolio';
 import { ITransaction } from '../types/models/transaction';
 import { TransactionType, TransactionStatus } from '../types/common/enums';
@@ -49,21 +49,23 @@ export class PortfolioService {
     private userRepository: UserRepository,
     private stockTokenRepository: StockTokenRepository,
     public vendorApiRepository: VendorApiRepository,
-    cacheService?: CacheService
+    cacheService?: CacheService,
   ) {
-    this.cacheService = cacheService || new CacheService({
-      tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
-      region: process.env.DYNAMODB_REGION || 'local',
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-      endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
-    });
-    
+    this.cacheService =
+      cacheService ||
+      new CacheService({
+        tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
+        region: process.env.DYNAMODB_REGION || 'local',
+        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+        endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
+      });
+
     // Log configuration
     console.log('[PORTFOLIO CACHE] Initialized with configuration', {
       tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
       ttl: this.CACHE_TTL,
-      isEnabled: this.isEnabled
+      isEnabled: this.isEnabled,
     });
   }
 
@@ -72,30 +74,39 @@ export class PortfolioService {
    * @param options Optional configuration for service initialization
    * @returns Promise with initialized PortfolioService instance
    */
-  public static async initialize(options: PortfolioServiceInitOptions = {}): Promise<PortfolioService> {
+  public static async initialize(
+    options: PortfolioServiceInitOptions = {},
+  ): Promise<PortfolioService> {
     const dbService = await DatabaseService.getInstance();
-    
+
     const portfolioRepository = new PortfolioRepository(dbService);
     const transactionRepository = new TransactionRepository(dbService);
     const userRepository = new UserRepository(dbService);
 
     // Initialize cache service with provided options or defaults
     const cacheService = new CacheService({
-      tableName: options.portfolioCacheTable || process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
+      tableName:
+        options.portfolioCacheTable ||
+        process.env.PORTFOLIO_CACHE_TABLE ||
+        'fuse-portfolio-cache-local',
       region: options.region || process.env.DYNAMODB_REGION || 'local',
       accessKeyId: options.accessKeyId || process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
       secretAccessKey: options.secretAccessKey || process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-      endpoint: options.endpoint || process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
+      endpoint: options.endpoint || process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
     });
 
     // Initialize stock token repository
-    const stockTokenRepository = new StockTokenRepository(new CacheService({
-      tableName: options.stockTokensTable || process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
-      region: options.region || process.env.DYNAMODB_REGION || 'local',
-      accessKeyId: options.accessKeyId || process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: options.secretAccessKey || process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-      endpoint: options.endpoint || process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
-    }));
+    const stockTokenRepository = new StockTokenRepository(
+      new CacheService({
+        tableName:
+          options.stockTokensTable || process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
+        region: options.region || process.env.DYNAMODB_REGION || 'local',
+        accessKeyId: options.accessKeyId || process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+        secretAccessKey:
+          options.secretAccessKey || process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+        endpoint: options.endpoint || process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
+      }),
+    );
 
     // Initialize vendor API repository
     const vendorApiRepository = new VendorApiRepository();
@@ -106,7 +117,7 @@ export class PortfolioService {
       userRepository,
       stockTokenRepository,
       vendorApiRepository,
-      cacheService
+      cacheService,
     );
   }
 
@@ -141,22 +152,24 @@ export class PortfolioService {
   /**
    * Get cached portfolio summary for a user
    */
-  private async getCachedUserPortfolioSummary(userId: string): Promise<CachedUserPortfolioSummary | null> {
+  private async getCachedUserPortfolioSummary(
+    userId: string,
+  ): Promise<CachedUserPortfolioSummary | null> {
     if (!this.isEnabled) {
       console.log('[PORTFOLIO CACHE] Cache is disabled, skipping read');
       return null;
     }
-    
+
     try {
       console.log(`[PORTFOLIO CACHE] Attempting to retrieve portfolio for user: ${userId}`);
       const cacheKey = this.generateUserPortfolioKey(userId);
-      
+
       const cachedData = await this.cacheService.get<CachedUserPortfolioSummary>(cacheKey);
       if (cachedData) {
         console.log(`[PORTFOLIO CACHE HIT] Found cached portfolio for user: ${userId}`);
         return cachedData;
       }
-      
+
       console.log(`[PORTFOLIO CACHE MISS] No valid cache for user: ${userId}`);
       return null;
     } catch (error) {
@@ -168,7 +181,10 @@ export class PortfolioService {
   /**
    * Cache portfolio summary for a user
    */
-  private async cacheUserPortfolioSummary(userId: string, data: CachedUserPortfolioSummary): Promise<void> {
+  private async cacheUserPortfolioSummary(
+    userId: string,
+    data: CachedUserPortfolioSummary,
+  ): Promise<void> {
     if (!this.isEnabled) {
       console.log('Cache disabled. Skipping cacheUserPortfolioSummary.');
       return;
@@ -177,12 +193,12 @@ export class PortfolioService {
     try {
       await this.checkTableExists();
       const key = this.generateUserPortfolioKey(userId);
-      
+
       // Ensure data has a timestamp if not provided
       if (!data.timestamp) {
         data.timestamp = new Date().toISOString();
       }
-      
+
       await this.cacheService.set(key, data, this.CACHE_TTL);
       console.log(`Cached portfolio summary for user: ${userId}`);
     } catch (error) {
@@ -194,26 +210,31 @@ export class PortfolioService {
   /**
    * Get cached portfolio summary
    */
-  private async getCachedPortfolioSummary(portfolioId: string): Promise<CachedPortfolioSummary | null> {
+  private async getCachedPortfolioSummary(
+    portfolioId: string,
+  ): Promise<CachedPortfolioSummary | null> {
     if (!this.isEnabled) {
       console.log('[PORTFOLIO CACHE] Cache is disabled, skipping read');
       return null;
     }
-    
+
     try {
       console.log(`[PORTFOLIO CACHE] Attempting to retrieve portfolio: ${portfolioId}`);
       const cacheKey = this.generatePortfolioKey(portfolioId);
-      
+
       const cachedData = await this.cacheService.get<CachedPortfolioSummary>(cacheKey);
       if (cachedData) {
         console.log(`[PORTFOLIO CACHE HIT] Found cached portfolio: ${portfolioId}`);
         return cachedData;
       }
-      
+
       console.log(`[PORTFOLIO CACHE MISS] No valid cache for portfolio: ${portfolioId}`);
       return null;
     } catch (error) {
-      console.error(`[PORTFOLIO CACHE ERROR] Error retrieving cache for portfolio ${portfolioId}:`, error);
+      console.error(
+        `[PORTFOLIO CACHE ERROR] Error retrieving cache for portfolio ${portfolioId}:`,
+        error,
+      );
       return null;
     }
   }
@@ -221,7 +242,10 @@ export class PortfolioService {
   /**
    * Cache portfolio summary
    */
-  private async cachePortfolioSummary(portfolioId: string, data: CachedPortfolioSummary): Promise<void> {
+  private async cachePortfolioSummary(
+    portfolioId: string,
+    data: CachedPortfolioSummary,
+  ): Promise<void> {
     if (!this.isEnabled) {
       console.log('Cache disabled. Skipping cachePortfolioSummary.');
       return;
@@ -230,12 +254,12 @@ export class PortfolioService {
     try {
       await this.checkTableExists();
       const key = this.generatePortfolioKey(portfolioId);
-      
+
       // Ensure data has a timestamp if not provided
       if (!data.timestamp) {
         data.timestamp = new Date().toISOString();
       }
-      
+
       await this.cacheService.set(key, data, this.CACHE_TTL);
       console.log(`Cached portfolio summary for portfolio: ${portfolioId}`);
     } catch (error) {
@@ -252,11 +276,11 @@ export class PortfolioService {
       console.log('[PORTFOLIO CACHE] Cache is disabled, skipping invalidation');
       return;
     }
-    
+
     try {
       console.log(`[PORTFOLIO CACHE] Invalidating cache for user: ${userId}`);
       const cacheKey = this.generateUserPortfolioKey(userId);
-      
+
       await this.cacheService.delete(cacheKey);
       console.log(`[PORTFOLIO CACHE] Successfully invalidated cache for user: ${userId}`);
     } catch (error) {
@@ -272,15 +296,18 @@ export class PortfolioService {
       console.log('[PORTFOLIO CACHE] Cache is disabled, skipping invalidation');
       return;
     }
-    
+
     try {
       console.log(`[PORTFOLIO CACHE] Invalidating cache for portfolio: ${portfolioId}`);
       const cacheKey = this.generatePortfolioKey(portfolioId);
-      
+
       await this.cacheService.delete(cacheKey);
       console.log(`[PORTFOLIO CACHE] Successfully invalidated cache for portfolio: ${portfolioId}`);
     } catch (error) {
-      console.error(`[PORTFOLIO CACHE ERROR] Error invalidating cache for portfolio ${portfolioId}:`, error);
+      console.error(
+        `[PORTFOLIO CACHE ERROR] Error invalidating cache for portfolio ${portfolioId}:`,
+        error,
+      );
     }
   }
 
@@ -290,13 +317,13 @@ export class PortfolioService {
   private async invalidatePortfolioCaches(userId: string, portfolioId: string): Promise<void> {
     try {
       console.log(`Invalidating caches for user ${userId} and portfolio ${portfolioId}`);
-      
+
       // Invalidate user cache
       await this.invalidateUserCache(userId);
-      
+
       // Invalidate portfolio cache
       await this.invalidatePortfolioCache(portfolioId);
-      
+
       console.log(`Cache invalidated for user ${userId} after transaction`);
     } catch (error) {
       // Solo logeamos el error, no lo propagamos
@@ -329,7 +356,7 @@ export class PortfolioService {
 
       const portfolio = await this.portfolioRepository.create({
         name,
-        user_id: userId
+        user_id: userId,
       });
 
       return portfolio;
@@ -347,14 +374,14 @@ export class PortfolioService {
     symbol: string,
     quantity: number,
     price: number,
-    type: TransactionType
+    type: TransactionType,
   ): Promise<ITransaction> {
     try {
       // Primero verificamos que el stock existe y obtenemos su precio actual
       // Esto se hace en paralelo con la obtención del portfolio
       const [stocksResponse, portfolio] = await Promise.all([
         this.vendorApiRepository.listStocks(),
-        this.portfolioRepository.findById(portfolioId)
+        this.portfolioRepository.findById(portfolioId),
       ]);
 
       const stock = stocksResponse.data.items.find(item => item.symbol === symbol);
@@ -370,18 +397,18 @@ export class PortfolioService {
       const numericCurrentPrice = Number(stock.price);
       const priceDiff = Number(Math.abs(numericCurrentPrice - price).toFixed(4));
       const maxDiff = Number((numericCurrentPrice * 0.02).toFixed(4));
-      
+
       if (priceDiff > maxDiff) {
         const minPrice = Number((numericCurrentPrice * 0.98).toFixed(4));
         const maxPrice = Number((numericCurrentPrice * 1.02).toFixed(4));
         throw new Error(
-          `Invalid price. Current price is $${numericCurrentPrice.toFixed(4)}. Your price must be within 2% ($${maxDiff.toFixed(4)}) of the current price. Valid range: $${minPrice} - $${maxPrice}`
+          `Invalid price. Current price is $${numericCurrentPrice.toFixed(4)}. Your price must be within 2% ($${maxDiff.toFixed(4)}) of the current price. Valid range: $${minPrice} - $${maxPrice}`,
         );
       }
 
       // Ejecutar la compra a través de la API externa del proveedor
       const buyResponse = await this.vendorApiRepository.buyStock(symbol, { price, quantity });
-      
+
       if (buyResponse.status !== 200) {
         throw new Error(`Error buying stock: ${buyResponse.message}`);
       }
@@ -394,7 +421,7 @@ export class PortfolioService {
         price,
         type,
         status: TransactionStatus.COMPLETED,
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
       });
 
       // Iniciamos invalidación de caché en segundo plano, sin esperar su finalización
@@ -414,13 +441,13 @@ export class PortfolioService {
     userId: string,
     symbol: string,
     quantity: number,
-    price: number
+    price: number,
   ): Promise<ITransaction> {
     try {
       // Get or create portfolio
       const portfolios = await this.getUserPortfolios(userId);
       let portfolio;
-      
+
       if (!portfolios || portfolios.length === 0) {
         portfolio = await this.createPortfolio(userId, 'Default Portfolio');
       } else {
@@ -433,7 +460,7 @@ export class PortfolioService {
         symbol,
         quantity,
         price,
-        TransactionType.BUY
+        TransactionType.BUY,
       );
     } catch (error) {
       console.error('Error buying stock:', error);
@@ -449,15 +476,15 @@ export class PortfolioService {
       const timestamp = new Date().toISOString();
       // Check cache first
       const cachedData = await this.getCachedUserPortfolioSummary(userId);
-      
+
       if (cachedData?.data) {
         console.log(`Using cached portfolio summary for user: ${userId}`);
-        
+
         // Return standardized response with cache metadata
         return {
           data: cachedData.data,
           fromCache: true,
-          timestamp: cachedData.timestamp || timestamp
+          timestamp: cachedData.timestamp || timestamp,
         };
       }
 
@@ -467,22 +494,22 @@ export class PortfolioService {
           data: {
             userId,
             totalValue: 0,
-            currency: "USD",
+            currency: 'USD',
             lastUpdated: timestamp,
-            stocks: []
+            stocks: [],
           },
-          timestamp
+          timestamp,
         };
-        
+
         const response = {
           data: emptyData.data,
           fromCache: false,
-          timestamp
+          timestamp,
         };
-        
+
         // Cache empty response
         await this.cacheUserPortfolioSummary(userId, emptyData);
-        
+
         return response;
       }
 
@@ -493,15 +520,15 @@ export class PortfolioService {
       const response = {
         data: summary.data,
         fromCache: false,
-        timestamp
+        timestamp,
       };
-      
+
       // Cache the response
       await this.cacheUserPortfolioSummary(userId, {
         data: summary.data,
-        timestamp
+        timestamp,
       });
-      
+
       return response;
     } catch (error) {
       console.error('Error getting portfolio summary:', error);
@@ -517,13 +544,13 @@ export class PortfolioService {
       const timestamp = new Date().toISOString();
       // Check cache first
       const cachedData = await this.getCachedPortfolioSummary(portfolioId);
-      
+
       if (cachedData?.data) {
         console.log(`Using cached portfolio summary for portfolio: ${portfolioId}`);
         return {
           data: cachedData.data,
           fromCache: true,
-          timestamp: cachedData.timestamp || timestamp
+          timestamp: cachedData.timestamp || timestamp,
         };
       }
 
@@ -537,10 +564,10 @@ export class PortfolioService {
       const stockSummary = await this.portfolioRepository.getPortfolioStockSummary(portfolioId);
 
       // Transformamos los datos del resumen de acciones sin necesidad de precios actuales externos
-      const stocks = stockSummary.map((summary) => {
+      const stocks = stockSummary.map(summary => {
         // Usamos el precio de compra como precio de referencia
         const purchasePrice = summary.total_cost / summary.quantity;
-        
+
         return {
           symbol: summary.symbol,
           name: summary.symbol, // Usamos el símbolo como nombre ya que no tenemos el nombre real
@@ -548,13 +575,16 @@ export class PortfolioService {
           currentPrice: Number(purchasePrice.toFixed(2)), // Usamos el precio de compra como precio actual
           profitLoss: {
             absolute: 0, // Sin precio actual, no podemos calcular beneficio/pérdida
-            percentage: 0
-          }
+            percentage: 0,
+          },
         };
       });
 
       // Calculamos el valor total del portfolio basado en precios de compra
-      const totalValue = stocks.reduce((sum, stock) => sum + (stock.currentPrice * stock.quantity), 0);
+      const totalValue = stocks.reduce(
+        (sum, stock) => sum + stock.currentPrice * stock.quantity,
+        0,
+      );
 
       // Actualizamos el valor total en la base de datos
       await this.portfolioRepository.updateValueAndTimestamp(portfolioId, totalValue);
@@ -563,17 +593,17 @@ export class PortfolioService {
         data: {
           userId: portfolio.user_id,
           totalValue: Number(totalValue.toFixed(2)),
-          currency: "USD",
+          currency: 'USD',
           lastUpdated: timestamp,
-          stocks
+          stocks,
         },
-        timestamp
+        timestamp,
       };
 
       const response = {
         data: portfolioData.data,
         fromCache: false,
-        timestamp
+        timestamp,
       };
 
       // Cache the response

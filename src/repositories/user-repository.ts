@@ -10,11 +10,8 @@ export class UserRepository {
    * @returns The user object if found, or null if not found.
    */
   async findById(id: string): Promise<IUser | null> {
-    const result = await this.db.query<IUser>(
-      'SELECT * FROM users WHERE id = $1',
-      [id]
-    );
-    
+    const result = await this.db.query<IUser>('SELECT * FROM users WHERE id = $1', [id]);
+
     return result.rows.length > 0 ? result.rows[0] : null;
   }
 }
