@@ -142,7 +142,10 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
         price,
         errorReason
       );
-      throw new ValidationError('Price must be within 2% of current price', priceInfo);
+      throw new ValidationError(
+        `Invalid price. Current price is $${numericCurrentPrice}. Your price must be within 2% ($${numericCurrentPrice * 0.02}) of the current price. Valid range: $${numericCurrentPrice * 0.98} - $${numericCurrentPrice * 1.02}`,
+        priceInfo
+      );
     }
     
     // Verificar si el usuario existe
