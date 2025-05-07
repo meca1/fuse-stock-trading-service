@@ -64,7 +64,32 @@ export class StockService {
    */
   public async buyStock(symbol: string, price: number, quantity: number): Promise<any> {
     try {
-      const stock = await this.getStockBySymbol(symbol);
+      console.log(`[BUY STOCK] Attempting to buy ${symbol} with price ${price} and quantity ${quantity}`);
+      
+      // 1. Try to get stock from cache first
+      console.log(`[STOCK CACHE] Checking stock cache for ${symbol}`);
+      const cachedStocks = await this.stockCacheRepo.getCachedStocks('all');
+      let stock: VendorStock | null = null;
+
+      if (cachedStocks) {
+        const cachedStock = cachedStocks.stocks.find(s => s.symbol === symbol);
+        if (cachedStock) {
+          console.log(`[STOCK CACHE HIT] Found ${symbol} in stock cache`);
+          stock = {
+            symbol: cachedStock.symbol,
+            name: cachedStock.name,
+            price: cachedStock.price,
+            exchange: cachedStock.market || 'NYSE',
+          };
+        }
+      }
+
+      // 2. If not in cache, get from API
+      if (!stock) {
+        console.log(`[STOCK CACHE MISS] ${symbol} not found in cache, fetching from API`);
+        stock = await this.getStockBySymbol(symbol);
+      }
+
       if (!stock) {
         throw new StockNotFoundError(symbol);
       }
@@ -73,7 +98,23 @@ export class StockService {
         throw new InvalidPriceError(stock.price, price, STOCK_CONFIG.PRICE_VARIATION_THRESHOLD);
       }
 
-      return await this.vendorApi.buyStock(symbol, { price, quantity });
+      console.log(`[BUY STOCK] Making purchase request for ${symbol}`);
+      const result = await this.vendorApi.buyStock(symbol, { price, quantity });
+      
+      // 3. Update cache with latest price
+      if (cachedStocks) {
+        const updatedStocks = cachedStocks.stocks.map(s => 
+          s.symbol === symbol 
+            ? { ...s, price: stock!.price, lastUpdated: new Date().toISOString() }
+            : s
+        );
+        await this.stockCacheRepo.cacheStocks('all', {
+          stocks: updatedStocks,
+          totalItems: updatedStocks.length,
+        }, STOCK_CONFIG.CACHE_TTL);
+      }
+
+      return result;
     } catch (error) {
       if (error instanceof StockNotFoundError || error instanceof InvalidPriceError) {
         throw error;
