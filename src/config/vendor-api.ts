@@ -1,4 +1,4 @@
-import { VendorApiConfig } from '../types/vendor/vendor-api';
+import { VendorApiConfig } from '../services/vendor/types/vendor-api';
 
 
 

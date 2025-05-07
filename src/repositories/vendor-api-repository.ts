@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
-import { ListStocksResponse, BuyStockParams, BuyStockResponse, VendorApiError } from '../types/vendor/stock-api';
-import { VendorApiConfig } from '../types/vendor/vendor-api';
+import { ListStocksResponse, BuyStockParams, BuyStockResponse, VendorApiError } from '../services/vendor/types/stock-api';
+import { VendorApiConfig } from '../services/vendor/types/vendor-api';
 import { DEFAULT_VENDOR_API_CONFIG } from '../config/vendor-api';
 import { VendorApiException } from '../utils/errors/vendor-api-error';
 

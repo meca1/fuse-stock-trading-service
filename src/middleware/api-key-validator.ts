@@ -1,7 +1,6 @@
 import { MiddlewareObj, Request } from '@middy/core';
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import { apiKeySchema } from '../types/schemas/handlers';
-import { handleZodError } from './zod-error-handler';
 import { AuthenticationError } from '../utils/errors/app-error';
 
 /**
@@ -15,7 +14,7 @@ export const apiKeyValidator = (): MiddlewareObj => {
       const apiKeyResult = apiKeySchema.safeParse(apiKey);
       
       if (!apiKeyResult.success) {
-        throw handleZodError(apiKeyResult.error);
+        throw new AuthenticationError('Invalid API key format');
       }
 
       if (apiKey !== process.env.VENDOR_API_KEY) {

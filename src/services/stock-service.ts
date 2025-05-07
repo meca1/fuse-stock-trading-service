@@ -11,7 +11,7 @@ import {
   GetStocksWithCacheParams,
   GetStocksWithCacheResult
 } from '../types/models/stock';
-import { StockNotFoundError, InvalidPriceError } from '../types/errors/stock-errors';
+import { StockNotFoundError, InvalidPriceError } from '../utils/errors/stock-errors';
 import { CacheService } from './cache-service';
 
 /**

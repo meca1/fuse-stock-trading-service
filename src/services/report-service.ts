@@ -1,7 +1,7 @@
 import { TransactionRepository } from '../repositories/transaction-repository';
 import { ITransaction } from '../types/models/transaction';
 import { TransactionStatus } from '../types/common/enums';
-import { IReportService } from '../types/services/report-service';
+import { IReportService } from './types/report-service';
 import { ReportData } from '../types/models/shared';
 import { DatabaseService } from '../config/database';
 

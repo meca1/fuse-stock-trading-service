@@ -8,7 +8,7 @@ import { CacheService } from '../cache-service';
 import { TransactionType, TransactionStatus } from '../../types/common/enums';
 import { IPortfolio } from '../../types/models/portfolio';
 import { ITransaction } from '../../types/models/transaction';
-import { VendorStock } from '../../types/vendor/stock-api';
+import { VendorStock } from '../vendor/types/stock-api';
 
 // Mock CacheService
 jest.mock('../cache-service');
