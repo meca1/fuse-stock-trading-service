@@ -1,6 +1,6 @@
 const AWS = require('aws-sdk');
 
-// Configuración para DynamoDB Local
+// Configuration for Local DynamoDB
 const dynamodb = new AWS.DynamoDB({
   endpoint: 'http://localhost:8000',
   region: 'us-east-1',
@@ -8,7 +8,7 @@ const dynamodb = new AWS.DynamoDB({
   secretAccessKey: 'local',
 });
 
-// Definición de las tablas
+// Table definitions
 const tables = [
   {
     TableName: 'fuse-stock-tokens-local',
@@ -51,59 +51,99 @@ const tables = [
   }
 ];
 
-// Función para crear una tabla
+// Function to create a table
 async function createTable(params) {
   try {
     await dynamodb.createTable(params).promise();
-    console.log(`✅ Tabla ${params.TableName} creada exitosamente`);
+    console.log(`✅ Table ${params.TableName} created successfully`);
+    return true;
   } catch (error) {
     if (error.code === 'ResourceInUseException') {
-      console.log(`⚠️  La tabla ${params.TableName} ya existe`);
+      console.log(`ℹ️  Table ${params.TableName} already exists`);
+      return true;
     } else {
-      console.error(`❌ Error creando tabla ${params.TableName}:`, error);
+      console.error(`❌ Error creating table ${params.TableName}:`, error.message);
+      return false;
     }
   }
 }
 
-// Función principal
+// Function to check TTL status
+async function checkTTLStatus(tableName) {
+  try {
+    const result = await dynamodb.describeTimeToLive({ TableName: tableName }).promise();
+    return result.TimeToLiveDescription.TimeToLiveStatus === 'ENABLED';
+  } catch (error) {
+    console.error(`❌ Error checking TTL for ${tableName}:`, error.message);
+    return false;
+  }
+}
+
+// Function to configure TTL
+async function configureTTL(tableName) {
+  try {
+    const isTTLEnabled = await checkTTLStatus(tableName);
+    
+    if (isTTLEnabled) {
+      console.log(`ℹ️  TTL is already enabled for table ${tableName}`);
+      return true;
+    }
+
+    await dynamodb.updateTimeToLive({
+      TableName: tableName,
+      TimeToLiveSpecification: {
+        AttributeName: 'ttl',
+        Enabled: true
+      }
+    }).promise();
+    
+    console.log(`✅ TTL configured successfully for table ${tableName}`);
+    return true;
+  } catch (error) {
+    if (error.code === 'ValidationException' && error.message.includes('TimeToLive is already enabled')) {
+      console.log(`ℹ️  TTL is already enabled for table ${tableName}`);
+      return true;
+    }
+    console.error(`❌ Error configuring TTL for table ${tableName}:`, error.message);
+    return false;
+  }
+}
+
+// Main function
 async function initializeDynamoDB() {
   try {
-    // Listar tablas existentes
+    // List existing tables
     const existingTables = await dynamodb.listTables().promise();
-    console.log('Tablas existentes:', existingTables.TableNames);
+    console.log('📋 Existing tables:', existingTables.TableNames.join(', '));
 
-    // Crear todas las tablas
-    for (const table of tables) {
-      await createTable(table);
+    // Create all tables
+    const tableCreationResults = await Promise.all(tables.map(table => createTable(table)));
+    const allTablesCreated = tableCreationResults.every(result => result);
+
+    if (!allTablesCreated) {
+      console.warn('⚠️  Some tables could not be created');
     }
 
-    // Lista de tablas con TTL
+    // List of tables with TTL
     const tablesWithTTL = ['fuse-stock-cache-local', 'fuse-portfolio-cache-local'];
     
-    // Configurar TTL para las tablas de caché
-    for (const tableName of tablesWithTTL) {
-      if (existingTables.TableNames.includes(tableName)) {
-        try {
-          await dynamodb.updateTimeToLive({
-            TableName: tableName,
-            TimeToLiveSpecification: {
-              AttributeName: 'ttl',
-              Enabled: true
-            }
-          }).promise();
-          console.log(`TTL configurado para la tabla ${tableName}`);
-        } catch (err) {
-          console.error(`Error configurando TTL para la tabla ${tableName}:`, err);
-        }
-      }
+    // Configure TTL for cache tables
+    const ttlResults = await Promise.all(
+      tablesWithTTL.map(tableName => configureTTL(tableName))
+    );
+    
+    const allTTLConfigured = ttlResults.every(result => result);
+    
+    if (!allTTLConfigured) {
+      console.warn('⚠️  Some tables could not be configured with TTL');
     }
 
-    console.log('✅ Inicialización de DynamoDB completada');
+    console.log('✅ DynamoDB initialization completed');
   } catch (error) {
-    console.error('❌ Error durante la inicialización:', error);
+    console.error('❌ Error during initialization:', error.message);
     process.exit(1);
   }
 }
 
-// Ejecutar la inicialización
+// Run initialization
 initializeDynamoDB(); 
