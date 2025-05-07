@@ -41,15 +41,23 @@ export class VendorApiRepository {
   private failureCount: number = 0;
   private lastFailureTime: number = 0;
   private circuitOpen: boolean = false;
-  private stockService: StockService;
+  private stockService: StockService | null = null;
 
   /**
    * Initializes the repository with a configured Axios client.
    * @param config Optional configuration for the repository
    */
-  constructor(config: Partial<VendorApiConfig> = {}, stockService: StockService) {
+  constructor(config: Partial<VendorApiConfig> = {}, stockService: StockService | null = null) {
     this.config = { ...DEFAULT_VENDOR_API_CONFIG, ...config };
     this.client = this.createAxiosClient();
+    this.stockService = stockService;
+  }
+
+  /**
+   * Sets the StockService instance after initialization
+   * This is used to break the circular dependency
+   */
+  public setStockService(stockService: StockService): void {
     this.stockService = stockService;
   }
 
@@ -250,11 +258,13 @@ export class VendorApiRepository {
     this.validateInput(symbol);
 
     try {
-      // Use StockService's cache
-      const stock = await this.stockService.getStockBySymbol(symbol);
-      if (stock) {
-        console.log(`[STOCK CACHE HIT] Found ${symbol} in cache`);
-        return stock;
+      // Use StockService's cache if available
+      if (this.stockService) {
+        const stock = await this.stockService.getStockBySymbol(symbol);
+        if (stock) {
+          console.log(`[STOCK CACHE HIT] Found ${symbol} in cache`);
+          return stock;
+        }
       }
 
       console.log(`[STOCK CACHE MISS] ${symbol} not found in cache, fetching from API`);
