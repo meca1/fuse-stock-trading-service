@@ -106,39 +106,7 @@ Set up the required DynamoDB tables:
 npm run dynamodb:init
 ```
 
-### 3. Initialize Stock Tokens
-
-Before using the main endpoints, you need to initialize the stock tokens in DynamoDB. This is required for the caching system to work properly.
-
-The most reliable way to do this is directly within the Docker container:
-
-```bash
-docker-compose run --rm app npx serverless invoke local --function updateStockTokens --data '{}' --stage local
-```
-
-This command:
-- Runs the lambda in the app container with all dependencies configured
-- Passes an empty object as the event data (required for schema validation) 
-- Uses the local stage configuration
-
-Alternative methods:
-```bash
-# HTTP endpoint (when server is running):
-curl -X POST "http://localhost:3000/dev/update-stock-tokens" \
-  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
-```
-
-```bash
-# Direct serverless invocation:
-serverless invoke local --function updateStockTokens --data '{}' --stage local
-
-```
-
-When successful, the lambda will fetch stock data from the vendor API and store tokens in DynamoDB for efficient pagination and caching. Without this initialization, stock listing and purchase endpoints may not work correctly.
-
-This process is automatically scheduled to run daily at 00:00 UTC in production environments.
-
-### 4. Start the Development Server
+### 3. Start the Development Server
 
 Start the local serverless development environment:
 
@@ -148,9 +116,24 @@ npm run dev
 
 The service will now be running at `http://localhost:3000`.
 
+### 5. Initialize Stock Tokens
+
+Before using the main endpoints, you need to initialize the stock tokens in DynamoDB. This is required for the caching system to work properly.
+
+You can initialize the stock tokens using the HTTP endpoint:
+
+```bash
+curl -X POST "http://localhost:3000/local/update-stock-tokens" \
+  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
+```
+
+When successful, the lambda will fetch stock data from the vendor API and store tokens in DynamoDB for efficient pagination and caching. Without this initialization, stock listing and purchase endpoints may not work correctly.
+
+This process is automatically scheduled to run daily at 00:00 UTC in production environments.
+
 ## Testing the Endpoints
 
-> **IMPORTANT**: Make sure you've initialized the stock tokens by running the `update-stock-tokens` endpoint as mentioned in step 3 before testing these endpoints.
+> **IMPORTANT**: Make sure you've initialized the stock tokens by running the `update-stock-tokens` endpoint as mentioned in step 5 before testing these endpoints.
 
 ### API Authentication
 
@@ -224,12 +207,6 @@ curl -X POST "http://localhost:3000/local/generate-report?date=2025-04-28" \
   -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
 ```
 
-You can also use the provided scripts:
-
-```bash
-node scripts/local/quick-report.js
-```
-
 ### Dates and Time Zones
 
 The system uses UTC for all date-related operations:
@@ -288,7 +265,7 @@ npm test
 Run tests with coverage:
 
 ```bash
-npm run test:coverage
+npm run test:cov
 ```
 
 ## Deployment
@@ -314,7 +291,7 @@ This variable indicates which AWS profile will be used for deployment. If you ha
 ### Deploy to Development Environment
 
 ```bash
-npm run deploy:dev
+npm run deploy
 ```
 
 ### Deploy to Production Environment
@@ -322,7 +299,7 @@ npm run deploy:dev
 Before deploying to production, you must run the database migrations:
 
 ```bash
-npm run db:migrate
+npm run db:migrate:prod
 ```
 
 Then, you can deploy the application:
@@ -331,23 +308,18 @@ Then, you can deploy the application:
 npm run deploy:prod
 ```
 
-Or manually:
-
-```bash
-serverless deploy --stage prod
-```
-
 ## Available Scripts
 
 - `npm run dev`: Run the service locally
 - `npm run build`: Build the TypeScript code
 - `npm test`: Run unit tests
+- `npm run test:cov`: Run tests with coverage
 - `npm run lint`: Run linting checks
-- `npm run db:init`: Initialize the database
-- `npm run db:migrate`: Run database migrations (only necessary for production)
+- `npm run format`: Format code with Prettier
+- `npm run db:migrate`: Run database migrations locally
+- `npm run db:migrate:prod`: Run database migrations in production
 - `npm run dynamodb:init`: Initialize DynamoDB tables
 - `npm run report:daily`: Generate and send a daily report
-- `npm run report:daily:cron`: Run the report service with cron scheduler
 
 ## Troubleshooting
 
