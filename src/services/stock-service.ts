@@ -245,17 +245,42 @@ export class StockService {
    */
   private async fetchStockBySymbol(symbol: string): Promise<VendorStock | null> {
     try {
+      // 1. Check in-memory cache first (fastest)
       const now = Date.now();
       const cachedStock = this.stockCache[symbol];
-
       if (cachedStock && now - cachedStock.timestamp < STOCK_CONFIG.CACHE_TTL) {
+        console.log(`[IN-MEMORY CACHE HIT] Found ${symbol} in memory cache`);
         return cachedStock.data;
       }
 
-      const token = await this.stockTokenRepo.getToken(symbol);
+      // 2. Check stock cache (fuse-stock-cache-local)
+      console.log(`[STOCK CACHE] Checking stock cache for ${symbol}`);
+      const cachedStocks = await this.stockCacheRepo.getCachedStocks('all');
+      if (cachedStocks) {
+        const stock = cachedStocks.stocks.find(s => s.symbol === symbol);
+        if (stock) {
+          console.log(`[STOCK CACHE HIT] Found ${symbol} in stock cache`);
+          const vendorStock = {
+            symbol: stock.symbol,
+            name: stock.name,
+            price: stock.price,
+            exchange: stock.market || 'NYSE',
+          };
+          // Update in-memory cache
+          this.stockCache[symbol] = {
+            data: vendorStock,
+            timestamp: now,
+          };
+          return vendorStock;
+        }
+      }
 
+      // 3. Check token cache (fuse-stock-tokens-local)
+      console.log(`[TOKEN CACHE] Checking token cache for ${symbol}`);
+      const token = await this.stockTokenRepo.getToken(symbol);
       if (token) {
         try {
+          console.log(`[TOKEN CACHE HIT] Found token for ${symbol}, using it to fetch stock`);
           const response = await this.vendorApi.listStocks(token);
           const stock = response.data.items.find(item => item.symbol === symbol);
 
@@ -267,18 +292,34 @@ export class StockService {
               exchange: stock.exchange || 'NYSE',
             };
 
+            // Update both caches
             this.stockCache[symbol] = {
               data: vendorStock,
               timestamp: now,
             };
 
+            // Update stock cache with the new data
+            await this.stockCacheRepo.cacheStocks('all', {
+              stocks: [{
+                symbol: stock.symbol,
+                name: stock.name,
+                price: stock.price,
+                currency: 'USD',
+                market: stock.exchange || 'NYSE',
+                lastUpdated: new Date().toISOString(),
+              }],
+              totalItems: 1,
+            }, STOCK_CONFIG.CACHE_TTL);
+
             return vendorStock;
           }
         } catch (error) {
-          // Continue with pagination search if token search fails
+          console.log(`[TOKEN CACHE] Error using token for ${symbol}, falling back to pagination`);
         }
       }
 
+      // 4. If no cache hits, search through pages
+      console.log(`[CACHE MISS] ${symbol} not found in any cache, searching through pages`);
       let currentToken: string | undefined = undefined;
       let pageCount = 0;
 
@@ -294,12 +335,27 @@ export class StockService {
             exchange: stock.exchange || 'NYSE',
           };
 
-          await this.stockTokenRepo.saveToken(symbol, currentToken || '');
-
+          // Update all caches
           this.stockCache[symbol] = {
             data: vendorStock,
             timestamp: now,
           };
+
+          // Update stock cache
+          await this.stockCacheRepo.cacheStocks('all', {
+            stocks: [{
+              symbol: stock.symbol,
+              name: stock.name,
+              price: stock.price,
+              currency: 'USD',
+              market: stock.exchange || 'NYSE',
+              lastUpdated: new Date().toISOString(),
+            }],
+            totalItems: 1,
+          }, STOCK_CONFIG.CACHE_TTL);
+
+          // Update token cache
+          await this.stockTokenRepo.saveToken(symbol, currentToken || '');
 
           return vendorStock;
         }
@@ -308,6 +364,7 @@ export class StockService {
         pageCount++;
       } while (currentToken && pageCount < STOCK_CONFIG.MAX_PAGES);
 
+      console.log(`[STOCK API] Stock ${symbol} not found after searching ${pageCount} pages`);
       return null;
     } catch (error) {
       throw new Error(

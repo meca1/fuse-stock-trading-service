@@ -146,10 +146,10 @@ export class CacheService {
 
       const item = {
         [this.primaryKeyName]: key,
-        data,
-        lastUpdated: new Date().toISOString(),
-        ...(ttl && { ttl: Math.floor(Date.now() / 1000) + ttl }),
-      };
+            data,
+            lastUpdated: new Date().toISOString(),
+            ...(ttl && { ttl: Math.floor(Date.now() / 1000) + ttl }),
+          };
 
       const command = new PutCommand({
         TableName: this.tableName,
