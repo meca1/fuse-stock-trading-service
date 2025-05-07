@@ -60,4 +60,11 @@ export const dailyReportResponseSchema = z.object({
       totalAmount: z.number()
     })
   })
+});
+
+export const updateStockTokensResponseSchema = z.object({
+  status: z.literal('success'),
+  data: z.object({
+    message: z.string()
+  })
 }); 

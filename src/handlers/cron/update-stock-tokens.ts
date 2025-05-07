@@ -1,66 +1,44 @@
-import { Handler } from 'aws-lambda';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import middy from '@middy/core';
+import httpErrorHandler from '@middy/http-error-handler';
+
+// Services
 import { StockService } from '../../services/stock-service';
-import { wrapHandler } from '../../middleware/lambda-error-handler';
-import { AppError, AuthenticationError } from '../../utils/errors/app-error';
-import { updateStockTokensEventSchema, apiKeySchema } from '../../types/schemas/handlers';
-import { StockTokenRepository } from '../../repositories/stock-token-repository';
-import { VendorApiClient } from '../../services/vendor/api-client';
-import { VendorApiRepository } from '../../repositories/vendor-api-repository';
-import { handleZodError } from '../../middleware/zod-error-handler';
-import { CacheService } from '../../services/cache-service';
 
-const updateStockTokensHandler: Handler = async (event, context) => {
-  console.log('Starting daily stock token update lambda', { 
-    event,
-    headers: event.headers ? {
-      'x-api-key-exists': !!event.headers['x-api-key'],
-      'X-API-Key-exists': !!event.headers['X-API-Key']
-    } : 'No headers'
-  });
-  
-  // Validate event structure
-  updateStockTokensEventSchema.parse(event);
-  
-  // Validate API key if this is an API Gateway event
-  if (event.headers) {
-    const apiKey = event.headers['x-api-key'] || event.headers['X-API-Key'];
-    const apiKeyResult = apiKeySchema.safeParse(apiKey);
-    
-    if (!apiKeyResult.success) {
-      throw handleZodError(apiKeyResult.error);
-    }
+// Middleware
+import { apiKeyValidator } from '../../middleware/api-key-validator';
+import { queryParamsValidator } from '../../middleware/query-params-validator';
+import { createResponseValidator } from '../../middleware/response-validator';
 
-    if (apiKey !== process.env.VENDOR_API_KEY) {
-      throw new AuthenticationError('Invalid API key');
-    }
-  }
+// Schemas
+import { updateStockTokensEventSchema } from '../../types/schemas/handlers';
+import { updateStockTokensResponseSchema } from '../../types/schemas/responses';
 
-  // Initialize cache service
-  const tokenCacheService = new CacheService({
-    tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
-    region: process.env.DYNAMODB_REGION || 'local',
-    accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-    secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-    endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
-  });
+// Constants
+import { HTTP_HEADERS, HTTP_STATUS } from '../../constants/http';
 
-  // Initialize repositories and services
-  const stockTokenRepo = new StockTokenRepository(tokenCacheService);
-  const vendorApiRepository = new VendorApiRepository();
-  const vendorApi = new VendorApiClient(vendorApiRepository);
-  const service = new StockService(stockTokenRepo, vendorApi);
-  await service.updateStockTokens().catch((error: any) => {
-    console.error('Error updating stock tokens:', error);
-    throw new AppError('Failed to update stock tokens', 500, 'INTERNAL_ERROR');
-  });
-  
+/**
+ * Handler to update stock tokens
+ */
+const updateStockTokensHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  const stockService = await StockService.initialize();
+  await stockService.updateStockTokens();
+
   return {
-    statusCode: 200,
+    statusCode: HTTP_STATUS.OK,
+    headers: HTTP_HEADERS,
     body: JSON.stringify({
       status: 'success',
-      message: 'Stock tokens updated successfully'
+      data: {
+        message: 'Stock tokens updated successfully'
+      }
     })
   };
 };
 
-export const handler = wrapHandler(updateStockTokensHandler); 
+// Export the handler wrapped with Middy middleware
+export const handler = middy(updateStockTokensHandler)
+  .use(apiKeyValidator())
+  .use(queryParamsValidator(updateStockTokensEventSchema))
+  .use(httpErrorHandler())
+  .use(createResponseValidator(updateStockTokensResponseSchema)); 
