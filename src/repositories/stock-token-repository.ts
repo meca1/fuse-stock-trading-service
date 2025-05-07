@@ -1,9 +1,7 @@
 import { CacheService } from '../services/cache-service';
-import { StockCache } from '../types/models/stock';
 
 export class StockTokenRepository {
   private cacheService: CacheService;
-  private stockCache: StockCache = {};
 
   constructor() {
     this.cacheService = new CacheService({
@@ -59,61 +57,6 @@ export class StockTokenRepository {
         return false;
       }
       throw error;
-    }
-  }
-
-  /**
-   * Gets a cached stock
-   */
-  async getCachedStock(symbol: string): Promise<any | null> {
-    try {
-      return await this.cacheService.get(`stock:${symbol}`);
-    } catch (error) {
-      console.error(`Error getting cached stock for ${symbol}:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * Caches a stock
-   */
-  async cacheStock(symbol: string, data: any, ttl: number): Promise<void> {
-    try {
-      await this.cacheService.set(`stock:${symbol}`, {
-        data,
-        lastUpdated: new Date().toISOString()
-      }, ttl);
-    } catch (error) {
-      console.error(`Error caching stock for ${symbol}:`, error);
-    }
-  }
-
-  /**
-   * Gets cached stocks with pagination
-   */
-  async getCachedStocks(baseKey: string, nextToken?: string): Promise<any | null> {
-    try {
-      const cacheKey = nextToken ? `${baseKey}:page:${nextToken}` : baseKey;
-      const result = await this.cacheService.get<{ data: any; lastUpdated: string }>(cacheKey);
-      return result?.data || null;
-    } catch (error) {
-      console.error(`Error getting cached stocks for key ${baseKey}:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * Caches stocks with pagination
-   */
-  async cacheStocks(baseKey: string, data: any, ttl: number, nextToken?: string): Promise<void> {
-    try {
-      const cacheKey = nextToken ? `${baseKey}:page:${nextToken}` : baseKey;
-      await this.cacheService.set(cacheKey, {
-        data,
-        lastUpdated: new Date().toISOString()
-      }, ttl);
-    } catch (error) {
-      console.error(`Error caching stocks for key ${baseKey}:`, error);
     }
   }
 }

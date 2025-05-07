@@ -1,5 +1,6 @@
 import { VendorApiClient } from './vendor/api-client';
 import { StockTokenRepository } from '../repositories/stock-token-repository';
+import { StockCacheRepository } from '../repositories/stock-cache-repository';
 import { VendorApiRepository } from '../repositories/vendor-api-repository';
 import {
   VendorStock,
@@ -23,6 +24,7 @@ export class StockService {
 
   constructor(
     private stockTokenRepo: StockTokenRepository,
+    private stockCacheRepo: StockCacheRepository,
     private vendorApi: VendorApiClient,
   ) {
     this.cacheService = new CacheService({
@@ -40,9 +42,10 @@ export class StockService {
    */
   public static async initialize(): Promise<StockService> {
     const stockTokenRepo = await StockTokenRepository.initialize();
+    const stockCacheRepo = await StockCacheRepository.initialize();
     const vendorApiRepository = new VendorApiRepository({}, null as any); // Temporal fix for circular dependency
     const vendorApi = new VendorApiClient(vendorApiRepository);
-    const stockService = new StockService(stockTokenRepo, vendorApi);
+    const stockService = new StockService(stockTokenRepo, stockCacheRepo, vendorApi);
     
     // Set the StockService in the VendorApiRepository after creation
     (vendorApiRepository as any).stockService = stockService;
@@ -372,12 +375,12 @@ export class StockService {
     try {
       // Try to get from cache
       console.log(`Attempting to retrieve from cache: ${cacheKey}`);
-      const cachedData = await this.cacheService.get<{ data: ListStocksResult; lastUpdated: string }>(cacheKey);
+      const cachedData = await this.stockCacheRepo.getCachedStocks(baseKey, nextToken);
 
-      if (cachedData?.data && Array.isArray(cachedData.data.stocks) && cachedData.data.stocks.length > 0) {
+      if (cachedData && Array.isArray(cachedData.stocks) && cachedData.stocks.length > 0) {
         console.log(`[CACHE HIT] Found data for key: ${cacheKey}`);
         return {
-          data: cachedData.data,
+          data: cachedData,
           cached: true,
         };
       }
@@ -390,10 +393,7 @@ export class StockService {
       // Save to cache
       try {
         console.log(`[CACHE] Saving data for key: ${cacheKey}`);
-        await this.cacheService.set(cacheKey, {
-          data: result,
-          lastUpdated: new Date().toISOString()
-        }, STOCK_CONFIG.CACHE_TTL);
+        await this.stockCacheRepo.cacheStocks(baseKey, result, STOCK_CONFIG.CACHE_TTL, nextToken);
         console.log('Cache write successful');
       } catch (err) {
         console.error(`[CACHE ERROR] Error saving data for key ${cacheKey}:`, err);
