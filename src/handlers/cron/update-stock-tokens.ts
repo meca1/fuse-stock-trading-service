@@ -9,6 +9,7 @@ import { StockTokenRepository } from '../../repositories/stock-token-repository'
 import { VendorApiClient } from '../../services/vendor/api-client';
 import { VendorApiRepository } from '../../repositories/vendor-api-repository';
 import { handleZodError } from '../../middleware/zod-error-handler';
+import { CacheService } from '../../services/cache-service';
 
 const updateStockTokensHandler: Handler = async (event, context) => {
   console.log('Starting daily stock token update lambda', { 
@@ -36,15 +37,27 @@ const updateStockTokensHandler: Handler = async (event, context) => {
     }
   }
   
+  // Initialize DynamoDB client
   const dynamoDb = DynamoDBDocument.from(new DynamoDB({
-    region: process.env.DYNAMODB_REGION || 'us-east-1',
+    region: process.env.DYNAMODB_REGION || 'local',
     credentials: {
       accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
       secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
     },
     endpoint: process.env.DYNAMODB_ENDPOINT
   }));
-  const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
+
+  // Initialize cache service
+  const tokenCacheService = new CacheService({
+    tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
+    region: process.env.DYNAMODB_REGION || 'local',
+    accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+    secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+    endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
+  });
+
+  // Initialize repositories and services
+  const stockTokenRepo = new StockTokenRepository(tokenCacheService);
   const vendorApiRepository = new VendorApiRepository();
   const vendorApi = new VendorApiClient(vendorApiRepository);
   const service = new StockService(stockTokenRepo, vendorApi);

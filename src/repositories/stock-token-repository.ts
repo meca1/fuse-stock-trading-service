@@ -1,62 +1,67 @@
-import { DynamoDBDocument, GetCommandInput, PutCommandInput } from '@aws-sdk/lib-dynamodb';
+import { CacheService } from '../services/cache-service';
 
 export class StockTokenRepository {
   constructor(
-    private dynamoDb: DynamoDBDocument,
-    private tableName: string
-  ) {}
+    private cacheService: CacheService
+  ) {
+    console.log('StockTokenRepository initialized with:', {
+      cacheServiceType: cacheService?.constructor?.name,
+      hasSetMethod: typeof cacheService?.set === 'function',
+      hasGetMethod: typeof cacheService?.get === 'function',
+      methods: Object.keys(cacheService || {})
+    });
+  }
 
   /**
-   * Gets a stock's pagination token from DynamoDB
+   * Gets a stock's pagination token from cache
    * @param symbol Stock symbol
    * @returns Token string or null if not found
    */
   async getToken(symbol: string): Promise<string | null> {
     try {
-      const params: GetCommandInput = {
-        TableName: this.tableName,
-        Key: { symbol }
-      };
+      console.log(`[StockTokenRepository] Searching for token for ${symbol}...`, {
+        cacheServiceType: this.cacheService?.constructor?.name,
+        hasGetMethod: typeof this.cacheService?.get === 'function'
+      });
       
-      console.log(`Searching for token for ${symbol} in table ${this.tableName}...`);
-      const result = await this.dynamoDb.get(params);
+      const result = await this.cacheService.get<{ nextToken: string; lastUpdated: string }>(symbol);
       
-      if (result.Item && 'nextToken' in result.Item) {
-        console.log(`Token found for ${symbol}: ${result.Item.nextToken}`);
-        console.log(`Last update: ${result.Item.lastUpdated || 'unknown'}`);
-        return result.Item.nextToken;
+      if (result?.nextToken) {
+        console.log(`[StockTokenRepository] Token found for ${symbol}: ${result.nextToken}`);
+        console.log(`[StockTokenRepository] Last update: ${result.lastUpdated || 'unknown'}`);
+        return result.nextToken;
       } else {
-        console.log(`Token not found for ${symbol} in DynamoDB`);
+        console.log(`[StockTokenRepository] Token not found for ${symbol}`);
         return null;
       }
     } catch (error) {
-      console.error(`Error retrieving token for ${symbol} from DynamoDB:`, error);
+      console.error(`[StockTokenRepository] Error retrieving token for ${symbol}:`, error);
       return null;
     }
   }
 
   /**
-   * Saves or updates a stock's pagination token in DynamoDB
+   * Saves or updates a stock's pagination token in cache
    * @param symbol Stock symbol
    * @param nextToken Token string
    */
   async saveToken(symbol: string, nextToken: string): Promise<void> {
     try {
-      const timestamp = new Date().toISOString();
-      const params: PutCommandInput = {
-        TableName: this.tableName,
-        Item: {
-          symbol,
-          nextToken,
-          lastUpdated: timestamp
-        }
+      const data = {
+        nextToken,
+        lastUpdated: new Date().toISOString()
       };
       
-      console.log(`Saving token for ${symbol} in table ${this.tableName}: ${nextToken}`);
-      await this.dynamoDb.put(params);
-      console.log(`Token successfully saved for ${symbol} at ${timestamp}`);
+      console.log(`[StockTokenRepository] Saving token for ${symbol}: ${nextToken}`, {
+        cacheServiceType: this.cacheService?.constructor?.name,
+        hasSetMethod: typeof this.cacheService?.set === 'function',
+        data
+      });
+      
+      await this.cacheService.set(symbol, data);
+      console.log(`[StockTokenRepository] Token successfully saved for ${symbol}`);
     } catch (error) {
-      console.error(`Error saving token for ${symbol} in DynamoDB:`, error);
+      console.error(`[StockTokenRepository] Error saving token for ${symbol}:`, error);
       throw error;
     }
   }

@@ -14,6 +14,26 @@ import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
 import { VendorApiRepository } from '../../repositories/vendor-api-repository';
+import { CacheService } from '../../services/cache-service';
+
+// Initialize DynamoDB client
+const dynamoDb = DynamoDBDocument.from(new DynamoDB({
+  region: process.env.DYNAMODB_REGION || 'local',
+  credentials: {
+    accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+    secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
+  },
+  endpoint: process.env.DYNAMODB_ENDPOINT
+}));
+
+// Initialize cache service
+const tokenCacheService = new CacheService({
+  tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
+  region: process.env.DYNAMODB_REGION || 'local',
+  accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+  secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+  endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
+});
 
 // We need to manually define service factory to fix the module not found error
 const getStockServiceInstance = () => {
@@ -22,16 +42,7 @@ const getStockServiceInstance = () => {
   const { VendorApiClient } = require('../../services/vendor/api-client');
   const { VendorApiRepository } = require('../../repositories/vendor-api-repository');
   
-  const dynamoDb = DynamoDBDocument.from(new DynamoDB({
-    region: process.env.DYNAMODB_REGION || 'us-east-1',
-    credentials: {
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
-    },
-    endpoint: process.env.DYNAMODB_ENDPOINT
-  }));
-  
-  const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
+  const stockTokenRepo = new StockTokenRepository(tokenCacheService);
   const vendorApiRepository = new VendorApiRepository();
   const vendorApi = new VendorApiClient(vendorApiRepository);
   return new StockService(stockTokenRepo, vendorApi);
@@ -89,20 +100,6 @@ const getPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGat
   const portfolioRepository = new PortfolioRepository(dbService);
   const transactionRepository = new TransactionRepository(dbService);
   const userRepository = new UserRepository(dbService);
-  
-  // Setup DynamoDB for cache
-  const dynamoDb = DynamoDBDocument.from(new DynamoDB({
-    region: process.env.DYNAMODB_REGION || 'us-east-1',
-    credentials: {
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
-    },
-    endpoint: process.env.DYNAMODB_ENDPOINT
-  }), {
-    marshallOptions: {
-      removeUndefinedValues: true
-    }
-  });
   
   // Get the optimized stock service
   const stockService = getStockServiceInstance();

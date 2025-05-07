@@ -15,28 +15,22 @@ import { DynamoDB } from '@aws-sdk/client-dynamodb';
 
 // We need to manually define service factory to fix the module not found error
 const getStockServiceInstance = (): StockService => {
-  // Crear una sola instancia del cliente DynamoDB para toda la función
-  const dynamoConfig = {
-    region: process.env.DYNAMODB_REGION || 'us-east-1',
-    credentials: {
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
-    },
-    endpoint: process.env.DYNAMODB_ENDPOINT
-  };
-  
-  const dynamoDb = DynamoDBDocument.from(new DynamoDB(dynamoConfig), {
-    marshallOptions: {
-      removeUndefinedValues: true
-    }
-  });
-  
   // Import these inline to avoid circular dependencies
   const { StockTokenRepository } = require('../../repositories/stock-token-repository');
   const { VendorApiClient } = require('../../services/vendor/api-client');
   const { VendorApiRepository } = require('../../repositories/vendor-api-repository');
+  const { CacheService } = require('../../services/cache-service');
   
-  const stockTokenRepo = new StockTokenRepository(dynamoDb, process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
+  // Initialize cache service for tokens
+  const tokenCacheService = new CacheService({
+    tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
+    region: process.env.DYNAMODB_REGION || 'us-east-1',
+    accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+    secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+    endpoint: process.env.DYNAMODB_ENDPOINT
+  });
+  
+  const stockTokenRepo = new StockTokenRepository(tokenCacheService);
   const vendorApiRepository = new VendorApiRepository();
   const vendorApi = new VendorApiClient(vendorApiRepository);
   
@@ -81,20 +75,6 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
   const paramsPromise = validateParams(event);
   
   // Inicializar los servicios mientras se validan los parámetros
-  const dynamoConfig = {
-    region: process.env.DYNAMODB_REGION || 'us-east-1',
-    credentials: {
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
-    },
-    endpoint: process.env.DYNAMODB_ENDPOINT
-  };
-  
-  const dynamoDb = DynamoDBDocument.from(new DynamoDB(dynamoConfig), {
-    marshallOptions: {
-      removeUndefinedValues: true
-    }
-  });
   const stockService = getStockServiceInstance();
   
   // Inicializar database service en paralelo con la validación
@@ -157,10 +137,7 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
         maximumAllowed: numericCurrentPrice * 0.02
       };
       
-      console.log('Price validation failed', priceInfo);
-      
-      errorReason = `Price must be within 2% of current price ($${numericCurrentPrice.toFixed(2)})`;
-      
+      errorReason = `Price validation failed: ${JSON.stringify(priceInfo)}`;
       // Registrar transacción fallida
       await registerFailedTransaction(
         transactionRepository,
@@ -170,16 +147,11 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
         price,
         errorReason
       );
-      
-      throw new BusinessError(errorReason);
+      throw new ValidationError('Price must be within 2% of current price', priceInfo);
     }
     
-    // Obtener datos de usuario y portfolios en paralelo
-    const [user, portfolios] = await Promise.all([
-      userRepository.findById(userId),
-      portfolioRepository.findByUserId(userId)
-    ]);
-    
+    // Verificar si el usuario existe
+    const user = await userRepository.findById(userId);
     if (!user) {
       errorReason = `User with ID ${userId} not found`;
       // Registrar transacción fallida
@@ -194,19 +166,34 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
       throw new NotFoundError('User', userId);
     }
     
-    // Determinar el portfolio a utilizar y crear servicios mientras tanto
-    let portfolioPromise;
-    let createPortfolioPromise;
+    // Obtener o crear portfolio
+    const portfolios = await portfolioRepository.findByUserId(userId);
+    let createPortfolioPromise: Promise<IPortfolio> | undefined;
     
     if (!portfolios || portfolios.length === 0) {
-      // Iniciar la creación del portfolio sin await
+      console.log(`No portfolio found for user ${userId}, creating new one`);
       createPortfolioPromise = portfolioRepository.create({
         user_id: userId,
-        name: `${user.name}'s Portfolio`
-      } as Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>);
+        name: 'Default Portfolio',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      } as Omit<IPortfolio, 'id'>);
     }
+    
+    // Inicializar portfolio service con caché
+    const dynamoDb = DynamoDBDocument.from(new DynamoDB({
+      region: process.env.DYNAMODB_REGION || 'us-east-1',
+      credentials: {
+        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
+      },
+      endpoint: process.env.DYNAMODB_ENDPOINT
+    }), {
+      marshallOptions: {
+        removeUndefinedValues: true
+      }
+    });
 
-    // Inicializar servicio de portfolio con caché integrada
     const portfolioService = new PortfolioService(
       portfolioRepository,
       transactionRepository,
