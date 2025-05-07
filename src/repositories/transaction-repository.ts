@@ -1,6 +1,5 @@
 import { DatabaseService } from '../config/database';
 import { ITransaction } from '../types/models/transaction';
-import { TransactionType, TransactionStatus } from '../types/common/enums';
 
 /**
  * Repository for transaction-related database operations

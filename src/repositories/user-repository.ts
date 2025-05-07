@@ -2,7 +2,7 @@ import { DatabaseService } from '../config/database';
 import { IUser } from '../types/models/user';
 
 export class UserRepository {
-  constructor(private readonly dbService: DatabaseService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   /**
    * Finds a user by their unique ID.
@@ -10,7 +10,7 @@ export class UserRepository {
    * @returns The user object if found, or null if not found.
    */
   async findById(id: string): Promise<IUser | null> {
-    const result = await this.dbService.query<IUser>(
+    const result = await this.db.query<IUser>(
       'SELECT * FROM users WHERE id = $1',
       [id]
     );
