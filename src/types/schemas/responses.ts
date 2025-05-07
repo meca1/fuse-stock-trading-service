@@ -22,4 +22,26 @@ export const portfolioResponseSchema = z.object({
     cached: z.boolean(),
     timestamp: z.string()
   })
+});
+
+export const stocksResponseSchema = z.object({
+  status: z.literal('success'),
+  data: z.object({
+    stocks: z.array(z.object({
+      symbol: z.string(),
+      name: z.string(),
+      price: z.number(),
+      currency: z.string(),
+      market: z.string(),
+      lastUpdated: z.string().optional(),
+      percentageChange: z.number().optional(),
+      volume: z.number().optional()
+    })),
+    nextToken: z.string().optional(),
+    totalItems: z.number(),
+    lastUpdated: z.string().optional()
+  }),
+  metadata: z.object({
+    cached: z.boolean()
+  })
 }); 

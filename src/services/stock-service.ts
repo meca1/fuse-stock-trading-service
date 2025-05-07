@@ -1,5 +1,6 @@
 import { VendorApiClient } from './vendor/api-client';
 import { StockTokenRepository } from '../repositories/stock-token-repository';
+import { VendorApiRepository } from '../repositories/vendor-api-repository';
 import { 
   VendorStock, 
   EnhancedVendorStock, 
@@ -28,12 +29,31 @@ export class StockService {
   ) {
     // Initialize CacheService for verifications
     this.cacheService = new CacheService({
-      tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
+      tableName: process.env.STOCK_CACHE_TABLE || 'fuse-stock-cache-local',
       region: process.env.DYNAMODB_REGION || 'us-east-1',
       accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
       secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
       endpoint: process.env.DYNAMODB_ENDPOINT
     });
+  }
+
+  /**
+   * Creates and initializes a new instance of StockService with all required dependencies
+   * @returns Promise with initialized StockService instance
+   */
+  public static async initialize(): Promise<StockService> {
+    const stockTokenRepo = new StockTokenRepository(new CacheService({
+      tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
+      region: process.env.DYNAMODB_REGION || 'local',
+      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+      endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
+    }));
+
+    const vendorApiRepository = new VendorApiRepository();
+    const vendorApi = new VendorApiClient(vendorApiRepository);
+
+    return new StockService(stockTokenRepo, vendorApi);
   }
 
   /**
@@ -329,12 +349,11 @@ export class StockService {
 
   /**
    * Gets stocks with cache handling
-   * @param params Parameters for getting stocks with cache
+   * @param nextToken Optional token for pagination
+   * @param search Optional search string for symbol or name
    * @returns Object containing stocks data and cache status
    */
-  public async getStocksWithCache(params: GetStocksWithCacheParams): Promise<GetStocksWithCacheResult> {
-    const { nextToken, search, cacheService, cacheTTL } = params;
-    
+  public async getStocksWithCache(nextToken?: string, search?: string): Promise<{ data: ListStocksResult, cached: boolean }> {
     // Generate cache key
     const baseKey = search ? `search:${search}` : 'all';
     const cacheKey = nextToken ? `${baseKey}:page:${nextToken}` : baseKey;
@@ -342,7 +361,7 @@ export class StockService {
     try {
       // Try to get from cache
       console.log(`Attempting to retrieve from cache: ${cacheKey}`);
-      const cachedData = await cacheService.get<ListStocksResult>(cacheKey);
+      const cachedData = await this.cacheService.get<ListStocksResult>(cacheKey);
       
       if (cachedData && Array.isArray(cachedData.stocks) && cachedData.stocks.length > 0) {
         console.log(`[CACHE HIT] Found data for key: ${cacheKey}`);
@@ -360,7 +379,7 @@ export class StockService {
       // Save to cache
       try {
         console.log(`[CACHE] Saving data for key: ${cacheKey}`);
-        await cacheService.set(cacheKey, result, cacheTTL);
+        await this.cacheService.set(cacheKey, result, STOCK_CONFIG.CACHE_TTL);
         console.log('Cache write successful');
       } catch (err) {
         console.error(`[CACHE ERROR] Error saving data for key ${cacheKey}:`, err);
