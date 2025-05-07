@@ -11,7 +11,6 @@ import { TransactionType, TransactionStatus } from '../types/common/enums';
 import { UserRepository } from '../repositories/user-repository';
 import { CacheService } from './cache-service';
 import { DatabaseService } from '../config/database';
-import { StockTokenRepository } from '../repositories/stock-token-repository';
 import { VendorApiRepository } from '../repositories/vendor-api-repository';
 import { VendorStock } from '../services/vendor/types/stock-api';
 
@@ -29,7 +28,6 @@ interface PortfolioResponseWithCache {
  */
 interface PortfolioServiceInitOptions {
   portfolioCacheTable?: string;
-  stockTokensTable?: string;
   region?: string;
   accessKeyId?: string;
   secretAccessKey?: string;
@@ -48,7 +46,6 @@ export class PortfolioService {
     private portfolioRepository: PortfolioRepository,
     private transactionRepository: TransactionRepository,
     private userRepository: UserRepository,
-    private stockTokenRepository: StockTokenRepository,
     private vendorApiRepository: VendorApiRepository,
   ) {
     this.cacheService = new CacheService({
@@ -93,19 +90,6 @@ export class PortfolioService {
       endpoint: options.endpoint || process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
     });
 
-    // Initialize stock token repository
-    const stockTokenRepository = new StockTokenRepository(
-      new CacheService({
-        tableName:
-          options.stockTokensTable || process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
-        region: options.region || process.env.DYNAMODB_REGION || 'local',
-        accessKeyId: options.accessKeyId || process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-        secretAccessKey:
-          options.secretAccessKey || process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-        endpoint: options.endpoint || process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
-      }),
-    );
-
     // Initialize vendor API repository
     const vendorApiRepository = new VendorApiRepository();
 
@@ -113,7 +97,6 @@ export class PortfolioService {
       portfolioRepository,
       transactionRepository,
       userRepository,
-      stockTokenRepository,
       vendorApiRepository,
     );
   }
