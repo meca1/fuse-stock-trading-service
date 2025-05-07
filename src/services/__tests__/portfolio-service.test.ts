@@ -2,44 +2,57 @@ import { PortfolioService } from '../portfolio-service';
 import { PortfolioRepository } from '../../repositories/portfolio-repository';
 import { TransactionRepository } from '../../repositories/transaction-repository';
 import { UserRepository } from '../../repositories/user-repository';
-import { StockService } from '../stock-service';
+import { StockTokenRepository } from '../../repositories/stock-token-repository';
+import { VendorApiRepository } from '../../repositories/vendor-api-repository';
+import { CacheService } from '../cache-service';
+import { TransactionType, TransactionStatus } from '../../types/common/enums';
 import { IPortfolio } from '../../types/models/portfolio';
 import { ITransaction } from '../../types/models/transaction';
-import { TransactionType } from '../../types/common/enums';
-import { CacheService } from '../cache-service';
+import { VendorStock } from '../../types/vendor/stock-api';
 
 // Mock CacheService
 jest.mock('../cache-service');
 
 describe('PortfolioService', () => {
+  let service: PortfolioService;
   let portfolioRepository: jest.Mocked<PortfolioRepository>;
   let transactionRepository: jest.Mocked<TransactionRepository>;
   let userRepository: jest.Mocked<UserRepository>;
-  let stockService: jest.Mocked<StockService>;
+  let stockTokenRepository: jest.Mocked<StockTokenRepository>;
+  let vendorApiRepository: jest.Mocked<VendorApiRepository>;
   let mockCacheService: jest.Mocked<CacheService>;
-  let service: PortfolioService;
 
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
 
-    portfolioRepository = { 
-      findById: jest.fn(), 
-      findByUserId: jest.fn(), 
-      create: jest.fn(), 
-      getPortfolioStockSummary: jest.fn(), 
-      updateValueAndTimestamp: jest.fn() 
+    portfolioRepository = {
+      findByUserId: jest.fn(),
+      findById: jest.fn(),
+      create: jest.fn(),
+      updateValueAndTimestamp: jest.fn(),
+      getPortfolioStockSummary: jest.fn()
     } as any;
-    
-    transactionRepository = { create: jest.fn() } as any;
-    userRepository = { findById: jest.fn() } as any;
-    
-    stockService = { 
-      getStockBySymbol: jest.fn(), 
-      isValidPrice: jest.fn(),
-      buyStock: jest.fn().mockResolvedValue({ status: 200, message: 'Success', data: { order: { transactionId: 'tx123' } } })
+
+    transactionRepository = {
+      create: jest.fn(),
+      findByPortfolioId: jest.fn()
     } as any;
-    
+
+    userRepository = {
+      findById: jest.fn()
+    } as any;
+
+    stockTokenRepository = {
+      getToken: jest.fn(),
+      saveToken: jest.fn()
+    } as any;
+
+    vendorApiRepository = {
+      listStocks: jest.fn(),
+      buyStock: jest.fn()
+    } as any;
+
     // Create mock CacheService
     mockCacheService = {
       get: jest.fn(),
@@ -52,10 +65,11 @@ describe('PortfolioService', () => {
     } as any;
     
     service = new PortfolioService(
-      portfolioRepository, 
-      transactionRepository, 
-      userRepository, 
-      stockService,
+      portfolioRepository,
+      transactionRepository,
+      userRepository,
+      stockTokenRepository,
+      vendorApiRepository,
       mockCacheService
     );
 
@@ -68,11 +82,82 @@ describe('PortfolioService', () => {
     jest.restoreAllMocks();
   });
 
-  it('getUserPortfolios returns portfolios', async () => {
-    const portfolios = [{ id: '1', name: 'Test', user_id: 'u1' } as IPortfolio];
-    portfolioRepository.findByUserId.mockResolvedValue(portfolios);
-    const result = await service.getUserPortfolios('u1');
-    expect(result).toEqual(portfolios);
+  describe('getUserPortfolios', () => {
+    it('returns user portfolios', async () => {
+      const mockPortfolios: IPortfolio[] = [
+        {
+          id: '1',
+          user_id: 'user1',
+          name: 'Test Portfolio',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      ];
+
+      portfolioRepository.findByUserId.mockResolvedValue(mockPortfolios);
+
+      const result = await service.getUserPortfolios('user1');
+      expect(result).toEqual(mockPortfolios);
+      expect(portfolioRepository.findByUserId).toHaveBeenCalledWith('user1');
+    });
+  });
+
+  describe('executeStockPurchase', () => {
+    it('creates a transaction successfully', async () => {
+      const mockStock: VendorStock = {
+        symbol: 'AAPL',
+        name: 'Apple',
+        price: 100,
+        exchange: 'NASDAQ'
+      };
+
+      const mockPortfolio: IPortfolio = {
+        id: '1',
+        user_id: 'user1',
+        name: 'Test Portfolio',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const mockTransaction: ITransaction = {
+        id: '1',
+        portfolio_id: '1',
+        stock_symbol: 'AAPL',
+        type: TransactionType.BUY,
+        quantity: 10,
+        price: 100,
+        status: TransactionStatus.COMPLETED,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        date: new Date().toISOString()
+      };
+
+      vendorApiRepository.listStocks.mockResolvedValue({
+        status: 200,
+        data: {
+          items: [mockStock],
+          nextToken: ''
+        }
+      });
+
+      portfolioRepository.findById.mockResolvedValue(mockPortfolio);
+      vendorApiRepository.buyStock.mockResolvedValue({
+        status: 200,
+        message: 'Success'
+      });
+      transactionRepository.create.mockResolvedValue(mockTransaction);
+
+      const result = await service.executeStockPurchase(
+        '1',
+        'AAPL',
+        10,
+        100,
+        TransactionType.BUY
+      );
+
+      expect(result).toEqual(mockTransaction);
+      expect(transactionRepository.create).toHaveBeenCalled();
+    });
   });
 
   it('createPortfolio creates and returns a portfolio', async () => {
@@ -82,40 +167,6 @@ describe('PortfolioService', () => {
     portfolioRepository.create.mockResolvedValue(portfolio);
     const result = await service.createPortfolio('u1', 'Test');
     expect(result).toEqual(portfolio);
-  });
-
-  it('executeStockPurchase creates a transaction', async () => {
-    // Mock para stock
-    stockService.getStockBySymbol.mockResolvedValue({ 
-      symbol: 'AAPL', 
-      name: 'Apple', 
-      price: 100,
-      exchange: 'NASDAQ'
-    });
-    stockService.isValidPrice.mockReturnValue(true);
-    
-    // Mock para portfolio
-    portfolioRepository.findById.mockResolvedValue({ 
-      id: '1', 
-      name: 'Test Portfolio', 
-      user_id: 'u1' 
-    } as IPortfolio);
-    
-    // Mock para transaction
-    transactionRepository.create.mockResolvedValue({ 
-      id: '1',
-      portfolio_id: '1',
-      stock_symbol: 'AAPL',
-      type: TransactionType.BUY,
-      quantity: 1,
-      price: 100,
-      status: 'COMPLETED',
-      date: new Date().toISOString()
-    } as ITransaction);
-    
-    const result = await service.executeStockPurchase('1', 'AAPL', 1, 100, TransactionType.BUY);
-    expect(result).toBeDefined();
-    expect(mockCacheService.delete).toHaveBeenCalled();
   });
 
   it('getUserPortfolioSummary returns summary with zero if no portfolios', async () => {
@@ -137,11 +188,19 @@ describe('PortfolioService', () => {
       { symbol: 'AAPL', quantity: 2, total_cost: 200 }
     ]);
     
-    stockService.getStockBySymbol.mockResolvedValue({ 
-      symbol: 'AAPL', 
-      name: 'Apple', 
-      price: 150,
-      exchange: 'NASDAQ'
+    stockTokenRepository.getToken.mockResolvedValue('token123');
+    
+    vendorApiRepository.listStocks.mockResolvedValue({
+      status: 200,
+      data: {
+        items: [{
+          symbol: 'AAPL',
+          name: 'Apple',
+          price: 150,
+          exchange: 'NASDAQ'
+        }],
+        nextToken: 'next'
+      }
     });
     
     portfolioRepository.updateValueAndTimestamp.mockResolvedValue();
