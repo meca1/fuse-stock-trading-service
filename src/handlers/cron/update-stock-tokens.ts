@@ -3,8 +3,6 @@ import { StockService } from '../../services/stock-service';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
 import { AppError, AuthenticationError } from '../../utils/errors/app-error';
 import { updateStockTokensEventSchema, apiKeySchema } from '../../types/schemas/handlers';
-import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
-import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { StockTokenRepository } from '../../repositories/stock-token-repository';
 import { VendorApiClient } from '../../services/vendor/api-client';
 import { VendorApiRepository } from '../../repositories/vendor-api-repository';
@@ -36,16 +34,6 @@ const updateStockTokensHandler: Handler = async (event, context) => {
       throw new AuthenticationError('Invalid API key');
     }
   }
-  
-  // Initialize DynamoDB client
-  const dynamoDb = DynamoDBDocument.from(new DynamoDB({
-    region: process.env.DYNAMODB_REGION || 'local',
-    credentials: {
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
-    },
-    endpoint: process.env.DYNAMODB_ENDPOINT
-  }));
 
   // Initialize cache service
   const tokenCacheService = new CacheService({

@@ -11,8 +11,7 @@ import { ITransaction } from '../types/models/transaction';
 import { TransactionType, TransactionStatus } from '../types/common/enums';
 import { StockService } from './stock-service';
 import { UserRepository } from '../repositories/user-repository';
-import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
-import { DynamoDB } from '@aws-sdk/client-dynamodb';
+import { CacheService } from './cache-service';
 
 /**
  * Interface for standardized response with cache metadata
@@ -27,8 +26,7 @@ interface PortfolioResponseWithCache {
  * Service to handle portfolio-related operations and caching
  */
 export class PortfolioService {
-  private dynamo: DynamoDBDocument;
-  private tableName: string;
+  private cacheService: CacheService;
   private readonly CACHE_TTL = 300; // 5 minutes
   private isEnabled: boolean = true;
 
@@ -37,34 +35,28 @@ export class PortfolioService {
     private transactionRepository: TransactionRepository,
     private userRepository: UserRepository,
     private stockService: StockService,
-    dynamoDb?: DynamoDBDocument,
+    cacheService?: CacheService,
     tableName: string = process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
     isEnabled: boolean = true
   ) {
-    // Initialize DynamoDB client if not provided
-    if (!dynamoDb) {
-      this.dynamo = DynamoDBDocument.from(new DynamoDB({
+    // Initialize CacheService if not provided
+    if (!cacheService) {
+      this.cacheService = new CacheService({
+        tableName,
         region: process.env.DYNAMODB_REGION || 'us-east-1',
-        credentials: {
-          accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-          secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
-        },
+        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
         endpoint: process.env.DYNAMODB_ENDPOINT
-      }), {
-        marshallOptions: {
-          removeUndefinedValues: true
-        }
       });
     } else {
-      this.dynamo = dynamoDb;
+      this.cacheService = cacheService;
     }
     
-    this.tableName = tableName;
     this.isEnabled = isEnabled;
     
     // Log configuration
     console.log('[PORTFOLIO CACHE] Initialized with configuration', {
-      tableName: this.tableName,
+      tableName,
       ttl: this.CACHE_TTL,
       isEnabled: this.isEnabled
     });
@@ -89,24 +81,12 @@ export class PortfolioService {
    */
   private async checkTableExists(): Promise<boolean> {
     try {
-      await this.dynamo.get({
-        TableName: this.tableName,
-        Key: { key: 'table-check-' + Date.now() }
-      });
-      
-      console.log(`[PORTFOLIO CACHE] Table ${this.tableName} exists and is accessible`);
-      return true;
+      return await this.cacheService.checkTableExists();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      if (errorMessage.includes('ResourceNotFoundException')) {
-        console.error(`[PORTFOLIO CACHE ERROR] Table ${this.tableName} does not exist:`, errorMessage);
-        this.isEnabled = false;
-        return false;
-      }
-      
-      console.log(`[PORTFOLIO CACHE] Table check returned: ${errorMessage}`);
-      return true;
+      console.error(`[PORTFOLIO CACHE ERROR] Table check failed:`, errorMessage);
+      this.isEnabled = false;
+      return false;
     }
   }
 
@@ -123,19 +103,14 @@ export class PortfolioService {
       console.log(`[PORTFOLIO CACHE] Attempting to retrieve portfolio for user: ${userId}`);
       const cacheKey = this.generateUserPortfolioKey(userId);
       
-      const cacheRes = await this.dynamo.get({
-        TableName: this.tableName,
-        Key: { key: cacheKey }
-      });
-      
-      const now = Math.floor(Date.now() / 1000);
-      if (cacheRes.Item?.data && cacheRes.Item.ttl > now) {
+      const cachedData = await this.cacheService.get<CachedUserPortfolioSummary>(cacheKey);
+      if (cachedData) {
         console.log(`[PORTFOLIO CACHE HIT] Found cached portfolio for user: ${userId}`);
-        return cacheRes.Item.data as CachedUserPortfolioSummary;
-      } else {
-        console.log(`[PORTFOLIO CACHE MISS] No valid cache for user: ${userId}`);
-        return null;
+        return cachedData;
       }
+      
+      console.log(`[PORTFOLIO CACHE MISS] No valid cache for user: ${userId}`);
+      return null;
     } catch (error) {
       console.error(`[PORTFOLIO CACHE ERROR] Error retrieving cache for user ${userId}:`, error);
       return null;
@@ -160,16 +135,7 @@ export class PortfolioService {
         data.timestamp = new Date().toISOString();
       }
       
-      const params = {
-        TableName: this.tableName,
-        Item: {
-          key,
-          data,
-          ttl: Math.floor(Date.now() / 1000) + this.CACHE_TTL
-        }
-      };
-      
-      await this.dynamo.put(params);
+      await this.cacheService.set(key, data, this.CACHE_TTL);
       console.log(`Cached portfolio summary for user: ${userId}`);
     } catch (error) {
       console.error('Error caching user portfolio summary:', error);
@@ -190,19 +156,14 @@ export class PortfolioService {
       console.log(`[PORTFOLIO CACHE] Attempting to retrieve portfolio: ${portfolioId}`);
       const cacheKey = this.generatePortfolioKey(portfolioId);
       
-      const cacheRes = await this.dynamo.get({
-        TableName: this.tableName,
-        Key: { key: cacheKey }
-      });
-      
-      const now = Math.floor(Date.now() / 1000);
-      if (cacheRes.Item?.data && cacheRes.Item.ttl > now) {
+      const cachedData = await this.cacheService.get<CachedPortfolioSummary>(cacheKey);
+      if (cachedData) {
         console.log(`[PORTFOLIO CACHE HIT] Found cached portfolio: ${portfolioId}`);
-        return cacheRes.Item.data as CachedPortfolioSummary;
-      } else {
-        console.log(`[PORTFOLIO CACHE MISS] No valid cache for portfolio: ${portfolioId}`);
-        return null;
+        return cachedData;
       }
+      
+      console.log(`[PORTFOLIO CACHE MISS] No valid cache for portfolio: ${portfolioId}`);
+      return null;
     } catch (error) {
       console.error(`[PORTFOLIO CACHE ERROR] Error retrieving cache for portfolio ${portfolioId}:`, error);
       return null;
@@ -227,16 +188,7 @@ export class PortfolioService {
         data.timestamp = new Date().toISOString();
       }
       
-      const params = {
-        TableName: this.tableName,
-        Item: {
-          key,
-          data,
-          ttl: Math.floor(Date.now() / 1000) + this.CACHE_TTL
-        }
-      };
-      
-      await this.dynamo.put(params);
+      await this.cacheService.set(key, data, this.CACHE_TTL);
       console.log(`Cached portfolio summary for portfolio: ${portfolioId}`);
     } catch (error) {
       console.error('Error caching portfolio summary:', error);
@@ -257,11 +209,7 @@ export class PortfolioService {
       console.log(`[PORTFOLIO CACHE] Invalidating cache for user: ${userId}`);
       const cacheKey = this.generateUserPortfolioKey(userId);
       
-      await this.dynamo.delete({
-        TableName: this.tableName,
-        Key: { key: cacheKey }
-      });
-      
+      await this.cacheService.delete(cacheKey);
       console.log(`[PORTFOLIO CACHE] Successfully invalidated cache for user: ${userId}`);
     } catch (error) {
       console.error(`[PORTFOLIO CACHE ERROR] Error invalidating cache for user ${userId}:`, error);
@@ -281,11 +229,7 @@ export class PortfolioService {
       console.log(`[PORTFOLIO CACHE] Invalidating cache for portfolio: ${portfolioId}`);
       const cacheKey = this.generatePortfolioKey(portfolioId);
       
-      await this.dynamo.delete({
-        TableName: this.tableName,
-        Key: { key: cacheKey }
-      });
-      
+      await this.cacheService.delete(cacheKey);
       console.log(`[PORTFOLIO CACHE] Successfully invalidated cache for portfolio: ${portfolioId}`);
     } catch (error) {
       console.error(`[PORTFOLIO CACHE ERROR] Error invalidating cache for portfolio ${portfolioId}:`, error);

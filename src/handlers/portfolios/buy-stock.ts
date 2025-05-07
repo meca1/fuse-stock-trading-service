@@ -10,8 +10,7 @@ import { wrapHandler } from '../../middleware/lambda-error-handler';
 import { AppError, ValidationError, NotFoundError, BusinessError, AuthenticationError } from '../../utils/errors/app-error';
 import { buyStockParamsSchema, buyStockBodySchema, apiKeySchema } from '../../types/schemas/handlers';
 import { handleZodError } from '../../middleware/zod-error-handler';
-import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
-import { DynamoDB } from '@aws-sdk/client-dynamodb';
+import { CacheService } from '../../services/cache-service';
 
 // We need to manually define service factory to fix the module not found error
 const getStockServiceInstance = (): StockService => {
@@ -19,18 +18,14 @@ const getStockServiceInstance = (): StockService => {
   const { StockTokenRepository } = require('../../repositories/stock-token-repository');
   const { VendorApiClient } = require('../../services/vendor/api-client');
   const { VendorApiRepository } = require('../../repositories/vendor-api-repository');
-  const { CacheService } = require('../../services/cache-service');
   
-  // Initialize cache service for tokens
-  const tokenCacheService = new CacheService({
+  const stockTokenRepo = new StockTokenRepository(new CacheService({
     tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
     region: process.env.DYNAMODB_REGION || 'us-east-1',
     accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
     secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
     endpoint: process.env.DYNAMODB_ENDPOINT
-  });
-  
-  const stockTokenRepo = new StockTokenRepository(tokenCacheService);
+  }));
   const vendorApiRepository = new VendorApiRepository();
   const vendorApi = new VendorApiClient(vendorApiRepository);
   
@@ -181,17 +176,12 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
     }
     
     // Inicializar portfolio service con caché
-    const dynamoDb = DynamoDBDocument.from(new DynamoDB({
+    const portfolioCacheService = new CacheService({
+      tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
       region: process.env.DYNAMODB_REGION || 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
-      },
+      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
       endpoint: process.env.DYNAMODB_ENDPOINT
-    }), {
-      marshallOptions: {
-        removeUndefinedValues: true
-      }
     });
 
     const portfolioService = new PortfolioService(
@@ -199,8 +189,7 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
       transactionRepository,
       userRepository,
       stockService,
-      dynamoDb,
-      process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local'
+      portfolioCacheService
     );
     
     // Resolver el portfolio (esperar creación si fue necesario)

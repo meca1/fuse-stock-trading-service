@@ -54,7 +54,6 @@ describe('PortfolioService', () => {
       transactionRepository, 
       userRepository, 
       stockService,
-      mockDynamoDb
     );
 
     // Mock console methods to avoid cluttering test output

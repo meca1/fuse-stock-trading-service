@@ -7,28 +7,15 @@ import { handleZodError } from '../../middleware/zod-error-handler';
 import { PortfolioRepository } from '../../repositories/portfolio-repository';
 import { TransactionRepository } from '../../repositories/transaction-repository';
 import { UserRepository } from '../../repositories/user-repository';
-import { StockService } from '../../services/stock-service';
 import { DatabaseService } from '../../config/database';
-import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
-import { DynamoDB } from '@aws-sdk/client-dynamodb';
-import { StockTokenRepository } from '../../repositories/stock-token-repository';
-import { VendorApiClient } from '../../services/vendor/api-client';
-import { VendorApiRepository } from '../../repositories/vendor-api-repository';
 import { CacheService } from '../../services/cache-service';
 
 // Initialize DynamoDB client
-const dynamoDb = DynamoDBDocument.from(new DynamoDB({
-  region: process.env.DYNAMODB_REGION || 'local',
-  credentials: {
-    accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-    secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
-  },
-  endpoint: process.env.DYNAMODB_ENDPOINT
-}));
+
 
 // Initialize cache service
-const tokenCacheService = new CacheService({
-  tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
+const portfolioCacheService = new CacheService({
+  tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
   region: process.env.DYNAMODB_REGION || 'local',
   accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
   secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
@@ -42,7 +29,13 @@ const getStockServiceInstance = () => {
   const { VendorApiClient } = require('../../services/vendor/api-client');
   const { VendorApiRepository } = require('../../repositories/vendor-api-repository');
   
-  const stockTokenRepo = new StockTokenRepository(tokenCacheService);
+  const stockTokenRepo = new StockTokenRepository(new CacheService({
+    tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
+    region: process.env.DYNAMODB_REGION || 'local',
+    accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+    secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+    endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
+  }));
   const vendorApiRepository = new VendorApiRepository();
   const vendorApi = new VendorApiClient(vendorApiRepository);
   return new StockService(stockTokenRepo, vendorApi);
@@ -110,8 +103,7 @@ const getPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGat
     transactionRepository,
     userRepository,
     stockService,
-    dynamoDb,
-    process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local'
+    portfolioCacheService
   );
   
   // Get portfolio summary (now uses integrated cache)
