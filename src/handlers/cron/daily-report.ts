@@ -25,42 +25,47 @@ const dailyReportHandler = async (event: APIGatewayProxyEvent): Promise<APIGatew
   const startTime = Date.now();
   const dateStr = event.queryStringParameters?.date || new Date().toISOString().split('T')[0];
   
-  // Initialize services
-  const reportService = await ReportService.initialize();
-  const emailService = await EmailService.initialize();
-  
-  // Generate report
-  const report = await reportService.generateDailyReport(dateStr);
-  
-  // Send by email
-  const recipients = process.env.REPORT_RECIPIENTS?.split(',') || ['admin@example.com'];
-  await emailService.sendReportEmail({
-    recipients,
-    subject: `Daily Transaction Report - ${dateStr}`,
-    reportData: report
-  });
-  
-  const executionTime = Date.now() - startTime;
-  
-  return {
-    statusCode: HTTP_STATUS.OK,
-    headers: HTTP_HEADERS,
-    body: JSON.stringify({
-      status: 'success',
-      data: {
-        message: 'Daily report generated and sent successfully',
-        date: dateStr,
-        recipients,
-        executionTime,
-        reportSummary: {
-          totalTransactions: report.totalTransactions,
-          successfulTransactions: report.successfulTransactions.length,
-          failedTransactions: report.failedTransactions.length,
-          totalAmount: report.totals.totalAmount
+  try {
+    // Initialize services
+    const reportService = await ReportService.initialize();
+    const emailService = await EmailService.initialize();
+    
+    // Generate report
+    const report = await reportService.generateDailyReport(dateStr);
+    
+    // Send by email
+    const recipients = process.env.REPORT_RECIPIENTS?.split(',') || ['admin@example.com'];
+    await emailService.sendReportEmail({
+      recipients,
+      subject: `Daily Transaction Report - ${dateStr}`,
+      reportData: report
+    });
+    
+    const executionTime = Date.now() - startTime;
+    
+    return {
+      statusCode: HTTP_STATUS.OK,
+      headers: HTTP_HEADERS,
+      body: JSON.stringify({
+        status: 'success',
+        data: {
+          message: 'Daily report generated and sent successfully',
+          date: dateStr,
+          recipients,
+          executionTime,
+          reportSummary: {
+            totalTransactions: report.totalTransactions,
+            successfulTransactions: report.successfulTransactions.length,
+            failedTransactions: report.failedTransactions.length,
+            totalAmount: report.totals.totalAmount
+          }
         }
-      }
-    })
-  };
+      })
+    };
+  } catch (error) {
+    console.error('Error generating daily report:', error);
+    throw error;
+  }
 };
 
 // Export the handler wrapped with Middy middleware

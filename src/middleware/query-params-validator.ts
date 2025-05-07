@@ -20,11 +20,17 @@ export const queryParamsValidator = (schema: ZodSchema) => {
           const validatedParams = schema.parse(request.event.queryStringParameters);
           request.event.queryStringParameters = validatedParams;
         }
-        // If neither exists, validate an empty object
+        // If neither exists, validate against empty object
         else {
-          schema.parse({});
+          const result = schema.safeParse({});
+          if (!result.success) {
+            throw new ValidationError('Missing required parameters', { error: result.error });
+          }
         }
       } catch (error) {
+        if (error instanceof ValidationError) {
+          throw error;
+        }
         throw new ValidationError('Invalid parameters', { error });
       }
     }
