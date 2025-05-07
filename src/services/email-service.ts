@@ -2,7 +2,7 @@ import { SendEmailCommandInput, SES } from '@aws-sdk/client-ses';
 import * as nodemailer from 'nodemailer';
 import { EmailParams } from '../types/models/shared';
 import { IEmailService } from './types/email-service';
-import { ReportData } from '../types/models/shared';
+import { EmailRepository } from '../repositories/email-repository';
 
 // Interfaces
 
@@ -14,6 +14,7 @@ export class EmailService implements IEmailService {
   private ses: SES | null = null;
   private transporter: nodemailer.Transporter | null = null;
   private readonly reportService: any; // ReportService
+  private emailRepository: EmailRepository;
 
   constructor() {
     // Importamos dinámicamente para evitar dependencias circulares
@@ -28,6 +29,8 @@ export class EmailService implements IEmailService {
     } else {
       this.initializeSMTP();
     }
+
+    this.emailRepository = new EmailRepository();
   }
 
   /**
@@ -35,7 +38,10 @@ export class EmailService implements IEmailService {
    * @returns Promise with initialized EmailService instance
    */
   public static async initialize(): Promise<EmailService> {
-    return new EmailService();
+    const emailRepository = await EmailRepository.initialize();
+    const service = new EmailService();
+    service.emailRepository = emailRepository;
+    return service;
   }
 
   /**
@@ -87,27 +93,7 @@ export class EmailService implements IEmailService {
    * @param params Parámetros del email
    */
   async sendReportEmail(params: EmailParams): Promise<void> {
-    const { recipients, subject, reportData } = params;
-
-    // Generar HTML del reporte
-    const htmlContent = this.reportService.formatReportAsHtml(reportData);
-
-    try {
-      if (this.ses) {
-        // Enviar con AWS SES
-        await this.sendWithSES(recipients, subject, htmlContent);
-      } else if (this.transporter) {
-        // Enviar con SMTP
-        await this.sendWithSMTP(recipients, subject, htmlContent);
-      } else {
-        throw new Error('No email provider has been initialized');
-      }
-
-      console.log(`Report successfully sent to ${recipients.join(', ')}`);
-    } catch (error) {
-      console.error('Error sending email:', error);
-      throw error;
-    }
+    await this.emailRepository.sendReportEmail(params);
   }
 
   /**

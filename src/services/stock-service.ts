@@ -8,11 +8,8 @@ import {
   ListStocksResult,
   StockCache,
   STOCK_CONFIG,
-  GetStocksWithCacheParams,
-  GetStocksWithCacheResult,
 } from '../types/models/stock';
 import { StockNotFoundError, InvalidPriceError } from '../utils/errors/stock-errors';
-import { CacheService } from './cache-service';
 
 /**
  * Service to handle stock-related operations, token management and daily updates
@@ -21,37 +18,18 @@ export class StockService {
   private stockCache: StockCache = {};
   private requestsInProgress: Record<string, Promise<VendorStock | null>> = {};
   private isTokenUpdateRunning = false;
-  private cacheService: CacheService;
 
   constructor(
     private stockTokenRepo: StockTokenRepository,
     private vendorApi: VendorApiClient,
-  ) {
-    // Initialize CacheService for verifications
-    this.cacheService = new CacheService({
-      tableName: process.env.STOCK_CACHE_TABLE || 'fuse-stock-cache-local',
-      region: process.env.DYNAMODB_REGION || 'us-east-1',
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-      endpoint: process.env.DYNAMODB_ENDPOINT,
-    });
-  }
+  ) {}
 
   /**
    * Creates and initializes a new instance of StockService with all required dependencies
    * @returns Promise with initialized StockService instance
    */
   public static async initialize(): Promise<StockService> {
-    const stockTokenRepo = new StockTokenRepository(
-      new CacheService({
-        tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
-        region: process.env.DYNAMODB_REGION || 'local',
-        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-        endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
-      }),
-    );
-
+    const stockTokenRepo = await StockTokenRepository.initialize();
     const vendorApiRepository = new VendorApiRepository();
     const vendorApi = new VendorApiClient(vendorApiRepository);
 
@@ -173,12 +151,10 @@ export class StockService {
    */
   public async checkTableExists(tableName: string): Promise<boolean> {
     try {
-      return await this.cacheService.checkTableExists();
+      return await this.stockTokenRepo.checkTableExists();
     } catch (error: any) {
       if (error.name === 'ResourceNotFoundException') {
-        // Since we're using CacheService, we don't need to create the table manually
-        // The table will be created by the CacheService when needed
-        return true;
+        return false;
       }
       throw error;
     }
@@ -195,11 +171,9 @@ export class StockService {
     this.isTokenUpdateRunning = true;
 
     try {
-      const tableName = process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local';
-
-      const tableExists = await this.checkTableExists(tableName);
+      const tableExists = await this.checkTableExists(process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local');
       if (!tableExists) {
-        throw new Error(`Table ${tableName} does not exist and could not be created`);
+        throw new Error(`Table ${process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local'} does not exist and could not be created`);
       }
 
       let currentToken: string | undefined;
@@ -384,7 +358,7 @@ export class StockService {
     try {
       // Try to get from cache
       console.log(`Attempting to retrieve from cache: ${cacheKey}`);
-      const cachedData = await this.cacheService.get<ListStocksResult>(cacheKey);
+      const cachedData = await this.stockTokenRepo.getCachedStocks(baseKey, nextToken);
 
       if (cachedData && Array.isArray(cachedData.stocks) && cachedData.stocks.length > 0) {
         console.log(`[CACHE HIT] Found data for key: ${cacheKey}`);
@@ -402,7 +376,7 @@ export class StockService {
       // Save to cache
       try {
         console.log(`[CACHE] Saving data for key: ${cacheKey}`);
-        await this.cacheService.set(cacheKey, result, STOCK_CONFIG.CACHE_TTL);
+        await this.stockTokenRepo.cacheStocks(baseKey, result, STOCK_CONFIG.CACHE_TTL, nextToken);
         console.log('Cache write successful');
       } catch (err) {
         console.error(`[CACHE ERROR] Error saving data for key ${cacheKey}:`, err);

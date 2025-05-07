@@ -32,10 +32,10 @@ A serverless application for stock trading built with AWS Lambda, PostgreSQL, an
    ```
 
 4. Initialize stock tokens (REQUIRED before any stock operations):
-   ```bash
+```bash
    curl -X POST "http://localhost:3000/local/update-stock-tokens" \
-     -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
-   ```
+  -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
+```
 
    > **Why is this necessary?**
    > 

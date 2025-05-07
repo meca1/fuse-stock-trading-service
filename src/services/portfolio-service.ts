@@ -2,6 +2,7 @@ import { PortfolioRepository } from '../repositories/portfolio-repository';
 import { TransactionRepository } from '../repositories/transaction-repository';
 import { UserRepository } from '../repositories/user-repository';
 import { VendorApiRepository } from '../repositories/vendor-api-repository';
+import { StockService } from './stock-service';
 import {
   IPortfolio,
   PortfolioSummaryResponse,
@@ -44,6 +45,7 @@ export class PortfolioService {
     private transactionRepository: TransactionRepository,
     private userRepository: UserRepository,
     private vendorApiRepository: VendorApiRepository,
+    private stockService: StockService,
   ) {}
 
   /**
@@ -54,13 +56,15 @@ export class PortfolioService {
     const portfolioRepository = await PortfolioRepository.initialize();
     const transactionRepository = await TransactionRepository.initialize();
     const userRepository = await UserRepository.initialize();
-    const vendorApiRepository = new VendorApiRepository();
+    const stockService = await StockService.initialize();
+    const vendorApiRepository = new VendorApiRepository({}, stockService);
 
     return new PortfolioService(
       portfolioRepository,
       transactionRepository,
       userRepository,
       vendorApiRepository,
+      stockService,
     );
   }
 
@@ -304,29 +308,15 @@ export class PortfolioService {
     type: TransactionType,
   ): Promise<ITransaction> {
     try {
-      // Primero obtenemos el portfolio
-      const portfolio = await this.portfolioRepository.findById(portfolioId);
+      // Obtener portfolio y stock en paralelo
+      const [portfolio, stock] = await Promise.all([
+        this.portfolioRepository.findById(portfolioId),
+        this.vendorApiRepository.getStock(symbol),
+      ]);
+
       if (!portfolio) {
         throw new Error(`Portfolio with ID ${portfolioId} not found`);
       }
-
-      // Buscamos el stock en todas las páginas
-      let stock: VendorStock | undefined;
-      let nextToken: string | undefined;
-      let pageCount = 0;
-      const MAX_PAGES = 10; // Límite de páginas para evitar bucles infinitos
-
-      do {
-        const response = await this.vendorApiRepository.listStocks(nextToken);
-        stock = response.data.items.find(item => item.symbol === symbol);
-        
-        if (stock) {
-          break;
-        }
-
-        nextToken = response.data.nextToken;
-        pageCount++;
-      } while (nextToken && pageCount < MAX_PAGES);
 
       if (!stock) {
         throw new Error(`Stock with symbol ${symbol} not found`);
@@ -345,26 +335,28 @@ export class PortfolioService {
         );
       }
 
-      // Ejecutar la compra a través de la API externa del proveedor
-      const buyResponse = await this.vendorApiRepository.buyStock(symbol, { price, quantity });
+      // Ejecutar la compra y crear la transacción en paralelo
+      const [buyResponse, transaction] = await Promise.all([
+        this.vendorApiRepository.buyStock(symbol, { price, quantity }),
+        this.transactionRepository.create({
+          portfolio_id: portfolioId,
+          stock_symbol: symbol,
+          quantity,
+          price,
+          type,
+          status: TransactionStatus.COMPLETED,
+          date: new Date().toISOString(),
+        }),
+      ]);
 
       if (buyResponse.status !== 200) {
         throw new Error(`Error buying stock: ${buyResponse.message}`);
       }
 
-      // Crear la transacción
-      const transaction = await this.transactionRepository.create({
-        portfolio_id: portfolioId,
-        stock_symbol: symbol,
-        quantity,
-        price,
-        type,
-        status: TransactionStatus.COMPLETED,
-        date: new Date().toISOString(),
-      });
-
       // Iniciamos invalidación de caché en segundo plano, sin esperar su finalización
-      this.invalidatePortfolioCaches(portfolio.user_id, portfolioId);
+      this.invalidatePortfolioCaches(portfolio.user_id, portfolioId).catch(error => {
+        console.error('Error invalidating cache:', error);
+      });
 
       return transaction;
     } catch (error) {

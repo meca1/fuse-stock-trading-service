@@ -25,6 +25,7 @@ export class CacheService {
   private readonly client: DynamoDBClient;
   private readonly docClient: DynamoDBDocumentClient;
   private readonly tableName: string;
+  private readonly primaryKeyName: string;
 
   constructor(config: CacheServiceConfig) {
     console.log('[CACHE SERVICE] Initializing with config:', {
@@ -40,6 +41,7 @@ export class CacheService {
     }
 
     this.tableName = config.tableName;
+    this.primaryKeyName = this.tableName.includes('stock-tokens') ? 'symbol' : 'key';
 
     // Configuración específica para entorno local
     const isLocal = process.env.NODE_ENV === 'local' || process.env.NODE_ENV === 'development';
@@ -74,6 +76,7 @@ export class CacheService {
       region: isLocal ? 'local' : config.region,
       endpoint: isLocal ? 'http://localhost:8000' : config.endpoint,
       isLocal,
+      primaryKeyName: this.primaryKeyName,
     });
   }
 
@@ -84,10 +87,10 @@ export class CacheService {
    */
   async get<T>(key: string): Promise<T | null> {
     try {
-      console.log(`[CACHE] Getting item with key: ${key} from table: ${this.tableName}`);
+      console.log(`[CACHE] Getting item with ${this.primaryKeyName}: ${key} from table: ${this.tableName}`);
       const command = new GetCommand({
         TableName: this.tableName,
-        Key: { key },
+        Key: { [this.primaryKeyName]: key },
       });
 
       console.log('[CACHE] Executing GetCommand with params:', command.input);
@@ -100,14 +103,14 @@ export class CacheService {
       });
 
       if (result.Item?.data) {
-        console.log(`[CACHE HIT] Found item for key: ${key}`);
+        console.log(`[CACHE HIT] Found item for ${this.primaryKeyName}: ${key}`);
         return result.Item.data as T;
       }
 
-      console.log(`[CACHE MISS] No item found for key: ${key}`);
+      console.log(`[CACHE MISS] No item found for ${this.primaryKeyName}: ${key}`);
       return null;
     } catch (error) {
-      console.error(`[CACHE ERROR] Error retrieving item for key ${key}:`, error);
+      console.error(`[CACHE ERROR] Error retrieving item for ${this.primaryKeyName} ${key}:`, error);
       throw error; // Re-throw to handle in the caller
     }
   }
@@ -122,16 +125,16 @@ export class CacheService {
     try {
       console.log('[CACHE] Saving item with key:', key, 'to table:', this.tableName, {
         item: {
-          key,
+          [this.primaryKeyName]: key,
           data,
           lastUpdated: new Date().toISOString(),
         },
         dataType: typeof data,
         hasData: !!data,
-        itemKeys: Object.keys({ key, data, lastUpdated: new Date().toISOString() }),
-        itemValues: Object.values({ key, data, lastUpdated: new Date().toISOString() }),
+        itemKeys: Object.keys({ [this.primaryKeyName]: key, data, lastUpdated: new Date().toISOString() }),
+        itemValues: Object.values({ [this.primaryKeyName]: key, data, lastUpdated: new Date().toISOString() }),
         itemStructure: JSON.stringify(
-          { key, data, lastUpdated: new Date().toISOString() },
+          { [this.primaryKeyName]: key, data, lastUpdated: new Date().toISOString() },
           null,
           2,
         ),
@@ -141,19 +144,12 @@ export class CacheService {
         dataValues: data && typeof data === 'object' ? Object.values(data) : [],
       });
 
-      // Adapt the item structure based on the table name
-      const item = this.tableName.includes('stock-tokens')
-        ? {
-            symbol: key,
-            ...(typeof data === 'object' ? data : { value: data }),
-            lastUpdated: new Date().toISOString(),
-          }
-        : {
-            key,
-            data,
-            lastUpdated: new Date().toISOString(),
-            ...(ttl && { ttl: Math.floor(Date.now() / 1000) + ttl }),
-          };
+      const item = {
+        [this.primaryKeyName]: key,
+        data,
+        lastUpdated: new Date().toISOString(),
+        ...(ttl && { ttl: Math.floor(Date.now() / 1000) + ttl }),
+      };
 
       const command = new PutCommand({
         TableName: this.tableName,
@@ -178,7 +174,7 @@ export class CacheService {
         errorMetadata: error.$metadata,
         stack: error.stack,
         item: {
-          key,
+          [this.primaryKeyName]: key,
           data,
           timestamp: new Date().toISOString(),
         },
@@ -193,18 +189,18 @@ export class CacheService {
    */
   async delete(key: string): Promise<void> {
     try {
-      console.log(`[CACHE] Deleting item with key: ${key} from table: ${this.tableName}`);
+      console.log(`[CACHE] Deleting item with ${this.primaryKeyName}: ${key} from table: ${this.tableName}`);
       const command = new DeleteCommand({
         TableName: this.tableName,
-        Key: { key },
+        Key: { [this.primaryKeyName]: key },
       });
 
       console.log('[CACHE] Executing DeleteCommand with params:', command.input);
 
       await this.docClient.send(command);
-      console.log(`[CACHE] Successfully deleted item for key: ${key}`);
+      console.log(`[CACHE] Successfully deleted item for ${this.primaryKeyName}: ${key}`);
     } catch (error) {
-      console.error(`[CACHE ERROR] Error deleting item for key ${key}:`, error);
+      console.error(`[CACHE ERROR] Error deleting item for ${this.primaryKeyName} ${key}:`, error);
       throw error; // Re-throw to handle in the caller
     }
   }

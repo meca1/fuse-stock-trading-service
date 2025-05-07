@@ -4,10 +4,12 @@ import {
   BuyStockParams,
   BuyStockResponse,
   VendorApiError,
+  VendorStock,
 } from '../services/vendor/types/stock-api';
 import { VendorApiConfig } from '../services/vendor/types/vendor-api';
 import { DEFAULT_VENDOR_API_CONFIG } from '../config/vendor-api';
 import { VendorApiException } from '../utils/errors/vendor-api-error';
+import { StockService } from '../services/stock-service';
 
 /**
  * Repository for interacting with the external stock API (Vendor).
@@ -39,14 +41,16 @@ export class VendorApiRepository {
   private failureCount: number = 0;
   private lastFailureTime: number = 0;
   private circuitOpen: boolean = false;
+  private stockService: StockService;
 
   /**
    * Initializes the repository with a configured Axios client.
    * @param config Optional configuration for the repository
    */
-  constructor(config: Partial<VendorApiConfig> = {}) {
+  constructor(config: Partial<VendorApiConfig> = {}, stockService: StockService) {
     this.config = { ...DEFAULT_VENDOR_API_CONFIG, ...config };
     this.client = this.createAxiosClient();
+    this.stockService = stockService;
   }
 
   /**
@@ -235,5 +239,70 @@ export class VendorApiRepository {
     this.validateInput(symbol, params);
 
     return this.makeRequest<BuyStockResponse>('post', `/stocks/${symbol}/buy`, undefined, params);
+  }
+
+  /**
+   * Gets a single stock by symbol
+   * @param symbol Stock symbol to get
+   * @returns Stock data or null if not found
+   */
+  async getStock(symbol: string): Promise<VendorStock | null> {
+    this.validateInput(symbol);
+
+    try {
+      // Use StockService's cache
+      const stock = await this.stockService.getStockBySymbol(symbol);
+      if (stock) {
+        console.log(`[STOCK CACHE HIT] Found ${symbol} in cache`);
+        return stock;
+      }
+
+      console.log(`[STOCK CACHE MISS] ${symbol} not found in cache, fetching from API`);
+      
+      let nextToken: string | undefined;
+      let pageCount = 0;
+      const MAX_PAGES = 10;
+
+      do {
+        const config: AxiosRequestConfig = {};
+        if (nextToken) {
+          config.params = { nextToken };
+        }
+
+        const response = await this.makeRequest<ListStocksResponse>('get', '/stocks', config);
+        console.log(`[STOCK API] Received ${response.data.items.length} stocks from API on page ${pageCount + 1}`);
+        
+        const stock = response.data.items.find(item => item.symbol === symbol);
+        if (stock) {
+          console.log(`[STOCK API] Found stock ${symbol} with price ${stock.price} on page ${pageCount + 1}`);
+          return {
+            symbol: stock.symbol,
+            name: stock.name,
+            price: stock.price,
+            exchange: stock.exchange || 'NYSE',
+          };
+        }
+
+        nextToken = response.data.nextToken;
+        pageCount++;
+
+        if (nextToken) {
+          console.log(`[STOCK API] Moving to next page ${pageCount + 1}`);
+        }
+      } while (nextToken && pageCount < MAX_PAGES);
+
+      console.log(`[STOCK API] Stock ${symbol} not found after searching ${pageCount} pages`);
+      return null;
+    } catch (error) {
+      console.error(`[STOCK API ERROR] Error getting stock ${symbol}:`, error);
+      if (error instanceof VendorApiException) {
+        throw error;
+      }
+      throw new VendorApiException(
+        `Error getting stock ${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        500,
+        'API_ERROR',
+      );
+    }
   }
 }

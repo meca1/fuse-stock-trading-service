@@ -5,7 +5,7 @@ const client = new DynamoDBClient({
   endpoint: 'http://dynamodb:8000',
   region: 'us-east-1',
   credentials: {
-    accessKeyId: 'local',
+  accessKeyId: 'local',
     secretAccessKey: 'local'
   }
 });
