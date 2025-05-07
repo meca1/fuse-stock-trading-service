@@ -9,7 +9,7 @@ import {
   STOCK_CONFIG 
 } from '../types/models/stock';
 import { StockNotFoundError, InvalidPriceError } from '../types/errors/stock-errors';
-import { DynamoDB } from '@aws-sdk/client-dynamodb';
+import { CacheService } from './cache-service';
 
 /**
  * Service to handle stock-related operations, token management and daily updates
@@ -18,19 +18,18 @@ export class StockService {
   private stockCache: StockCache = {};
   private requestsInProgress: Record<string, Promise<VendorStock | null>> = {};
   private isTokenUpdateRunning = false;
-  private dynamoDb: DynamoDB;
+  private cacheService: CacheService;
 
   constructor(
     private stockTokenRepository: StockTokenRepository,
     private vendorApi: VendorApiClient
   ) {
-    // Initialize DynamoDB client for verifications
-    this.dynamoDb = new DynamoDB({
+    // Initialize CacheService for verifications
+    this.cacheService = new CacheService({
+      tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
       region: process.env.DYNAMODB_REGION || 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local'
-      },
+      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
       endpoint: process.env.DYNAMODB_ENDPOINT
     });
   }
@@ -142,48 +141,14 @@ export class StockService {
    */
   public async checkTableExists(tableName: string): Promise<boolean> {
     try {
-      await this.dynamoDb.describeTable({ TableName: tableName });
-      return true;
+      return await this.cacheService.checkTableExists();
     } catch (error: any) {
       if (error.name === 'ResourceNotFoundException') {
-        await this.createTable(tableName);
+        // Since we're using CacheService, we don't need to create the table manually
+        // The table will be created by the CacheService when needed
         return true;
       }
       throw error;
-    }
-  }
-
-  /**
-   * Creates the table if it doesn't exist
-   */
-  private async createTable(tableName: string): Promise<void> {
-    try {
-      await this.dynamoDb.createTable({
-        TableName: tableName,
-        KeySchema: [
-          { AttributeName: 'symbol', KeyType: 'HASH' }
-        ],
-        AttributeDefinitions: [
-          { AttributeName: 'symbol', AttributeType: 'S' }
-        ],
-        ProvisionedThroughput: {
-          ReadCapacityUnits: 5,
-          WriteCapacityUnits: 5
-        }
-      });
-      
-      // Wait for table to become active
-      let tableActive = false;
-      while (!tableActive) {
-        const response = await this.dynamoDb.describeTable({ TableName: tableName });
-        if (response.Table && response.Table.TableStatus === 'ACTIVE') {
-          tableActive = true;
-        } else {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-    } catch (error) {
-      throw new Error(`Error creating table ${tableName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
