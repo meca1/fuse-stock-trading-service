@@ -368,12 +368,14 @@ export class PortfolioService {
 
       // Validar el precio (2% de variación permitida)
       const numericCurrentPrice = Number(stock.price);
-      const priceDiff = Number(Math.abs(numericCurrentPrice - price).toFixed(10));
-      const maxDiff = Number((numericCurrentPrice * 0.02).toFixed(10));
+      const priceDiff = Number(Math.abs(numericCurrentPrice - price).toFixed(4));
+      const maxDiff = Number((numericCurrentPrice * 0.02).toFixed(4));
       
       if (priceDiff > maxDiff) {
+        const minPrice = Number((numericCurrentPrice * 0.98).toFixed(4));
+        const maxPrice = Number((numericCurrentPrice * 1.02).toFixed(4));
         throw new Error(
-          `Invalid price. Current price is $${numericCurrentPrice}. Your price must be within 2% ($${maxDiff}) of the current price. Valid range: $${(numericCurrentPrice * 0.98).toFixed(2)} - $${(numericCurrentPrice * 1.02).toFixed(2)}`
+          `Invalid price. Current price is $${numericCurrentPrice.toFixed(4)}. Your price must be within 2% ($${maxDiff.toFixed(4)}) of the current price. Valid range: $${minPrice} - $${maxPrice}`
         );
       }
 

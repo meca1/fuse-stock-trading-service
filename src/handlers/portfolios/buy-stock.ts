@@ -23,34 +23,47 @@ import { HTTP_HEADERS, HTTP_STATUS } from '../../constants/http';
 const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const startTime = Date.now();
   
-  // Initialize service
-  const portfolioService = await PortfolioService.initialize();
-  
-  // Get parameters from validated event
-  const { symbol } = event.pathParameters as { symbol: string };
-  const { price, quantity, userId } = JSON.parse(event.body!) as { price: number; quantity: number; userId: string };
-  
-  // Execute purchase
-  const transaction = await portfolioService.buyStock(
-    userId,
-    symbol,
-    quantity,
-    price
-  );
-  
-  const executionTime = Date.now() - startTime;
-  
-  return {
-    statusCode: HTTP_STATUS.OK,
-    headers: HTTP_HEADERS,
-    body: JSON.stringify({
-      status: 'success',
-      data: {
-        ...transaction,
-        executionTime: `${executionTime}ms`
-      }
-    })
-  };
+  try {
+    // Initialize service
+    const portfolioService = await PortfolioService.initialize();
+    
+    // Get parameters from validated event
+    const { symbol } = event.pathParameters as { symbol: string };
+    const { price, quantity, userId } = JSON.parse(event.body!) as { price: number; quantity: number; userId: string };
+    
+    // Execute purchase
+    const transaction = await portfolioService.buyStock(
+      userId,
+      symbol,
+      quantity,
+      price
+    );
+    
+    const executionTime = Date.now() - startTime;
+    
+    return {
+      statusCode: HTTP_STATUS.OK,
+      headers: HTTP_HEADERS,
+      body: JSON.stringify({
+        status: 'success',
+        data: {
+          ...transaction,
+          executionTime: `${executionTime}ms`
+        }
+      })
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+    
+    return {
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      headers: HTTP_HEADERS,
+      body: JSON.stringify({
+        status: 'error',
+        message: errorMessage
+      })
+    };
+  }
 };
 
 // Export the handler wrapped with Middy middleware
