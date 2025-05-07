@@ -7,7 +7,7 @@ A serverless application for stock trading built with AWS Lambda, PostgreSQL, an
 - Node.js 18 or higher
 - Docker and Docker Compose
 - AWS CLI (for deployment)
-- AWS SAM CLI (for local development)
+- Serverless Framework (`npm install -g serverless@3.x`)
 
 ## Local Development Setup
 
@@ -31,7 +31,7 @@ A serverless application for stock trading built with AWS Lambda, PostgreSQL, an
    npm run dev
    ```
 
-4. Initialize stock tokens (required before using the API):
+4. Initialize stock tokens (REQUIRED before any stock operations):
    ```bash
    curl -X POST "http://localhost:3000/local/update-stock-tokens" \
      -H "x-api-key: nSbPbFJfe95BFZufiDwF32UhqZLEVQ5K4wdtJI2e"
@@ -43,21 +43,25 @@ A serverless application for stock trading built with AWS Lambda, PostgreSQL, an
    > - Fetches the current list of available stocks from the vendor API
    > - Stores them in DynamoDB for efficient caching and pagination
    > - Enables the stock listing and purchase endpoints to work properly
+   > - **Required before any stock operations (list, buy, etc.)**
    > 
    > In production, this process is automated:
    > - Runs daily at 00:00 UTC via a scheduled Lambda function
    > - Ensures stock data is always up to date
    > - Maintains a consistent cache of available stocks
    > - Prevents API rate limiting by caching vendor responses
+   > 
+   > **Troubleshooting**: If you get "Stock not found" errors, make sure you've run this initialization step first.
 
 ## Available Scripts
 
 - `npm run dev`: Start the local development server
-- `npm run build`: Build the application
 - `npm run test`: Run tests
 - `npm run lint`: Run linter
 - `npm run db:migrate:status`: Check migration status
 - `npm run db:rollback`: Rollback the last migration
+- `npm run deploy`: Deploy to development environment
+- `npm run deploy:prod`: Deploy to production environment
 
 ## Project Structure
 
@@ -151,15 +155,15 @@ npm test
 
 ## Deployment
 
-1. Build the application:
-   ```bash
-   npm run build
-   ```
+Deploy using the available npm scripts:
 
-2. Deploy using AWS SAM:
-   ```bash
-   sam deploy
-   ```
+```bash
+# Deploy to development
+npm run deploy
+
+# Deploy to production
+npm run deploy:prod
+```
 
 ## License
 
