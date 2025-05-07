@@ -390,40 +390,6 @@ export class PortfolioService {
   }
 
   /**
-   * Executes a stock purchase for a user
-   */
-  async buyStock(
-    userId: string,
-    symbol: string,
-    quantity: number,
-    price: number,
-  ): Promise<ITransaction> {
-    try {
-      // Get or create portfolio
-      const portfolios = await this.getUserPortfolios(userId);
-      let portfolio;
-
-      if (!portfolios || portfolios.length === 0) {
-        portfolio = await this.createPortfolio(userId, 'Default Portfolio');
-      } else {
-        portfolio = portfolios[0];
-      }
-
-      // Execute the purchase
-      return await this.executeStockPurchase(
-        portfolio.id,
-        symbol,
-        quantity,
-        price,
-        TransactionType.BUY,
-      );
-    } catch (error) {
-      console.error('Error buying stock:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Gets a summary of all portfolios for a user
    */
   async getUserPortfolioSummary(userId: string): Promise<PortfolioResponseWithCache> {
@@ -524,6 +490,59 @@ export class PortfolioService {
   }
 
   /**
+   * Executes a stock purchase for a user
+   */
+  async buyStock(
+    userId: string,
+    symbol: string,
+    quantity: number,
+    price: number,
+  ): Promise<ITransaction> {
+    try {
+      // Get or create portfolio
+      const cacheKey = this.generateUserPortfolioKey(userId);
+      console.log(`[PORTFOLIO CACHE] Attempting to retrieve portfolio for user: ${userId}`);
+      const cachedData = await this.cacheService.get<{ data: IPortfolio[]; timestamp: string }>(cacheKey);
+
+      let portfolio;
+      if (cachedData?.data && Array.isArray(cachedData.data) && cachedData.data.length > 0) {
+        console.log(`[PORTFOLIO CACHE HIT] Found valid cache for user: ${userId}`);
+        portfolio = cachedData.data[0];
+      } else {
+        console.log(`[PORTFOLIO CACHE MISS] No valid cache for user: ${userId}`);
+        const portfolios = await this.portfolioRepository.findByUserId(userId);
+        
+        if (!portfolios || portfolios.length === 0) {
+          console.log(`Creating new portfolio for user: ${userId}`);
+          portfolio = await this.createPortfolio(userId, 'Default Portfolio');
+        } else {
+          portfolio = portfolios[0];
+        }
+
+        // Cache the portfolio
+        await this.cacheService.set(cacheKey, { data: [portfolio], timestamp: new Date().toISOString() }, this.CACHE_TTL);
+        console.log(`Cached portfolio for user: ${userId}`);
+      }
+
+      if (!portfolio || !portfolio.id) {
+        throw new Error(`Failed to get or create portfolio for user: ${userId}`);
+      }
+
+      // Execute the purchase
+      return await this.executeStockPurchase(
+        portfolio.id,
+        symbol,
+        quantity,
+        price,
+        TransactionType.BUY,
+      );
+    } catch (error) {
+      console.error('Error buying stock:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Obtiene un resumen completo del portfolio incluyendo el valor actual de las acciones
    */
   async getPortfolioSummary(portfolioId: string): Promise<PortfolioResponseWithCache> {
@@ -544,39 +563,36 @@ export class PortfolioService {
       // Obtenemos el portfolio
       const portfolio = await this.portfolioRepository.findById(portfolioId);
       if (!portfolio) {
-        throw new Error(`Portfolio not found: ${portfolioId}`);
+        throw new Error(`Portfolio with ID ${portfolioId} not found`);
       }
 
-      // Obtenemos el resumen de las acciones
-      const stockSummary = await this.portfolioRepository.getPortfolioStockSummary(portfolioId);
-
-      // Transformamos los datos del resumen de acciones sin necesidad de precios actuales externos
+      const stockSummary = await this.portfolioRepository.getPortfolioStockSummary(portfolio.id);
+      
+      // Transformamos los datos del resumen de acciones
       const stocks = stockSummary.map(summary => {
-        // Usamos el precio de compra como precio de referencia
         const purchasePrice = summary.total_cost / summary.quantity;
-
         return {
           symbol: summary.symbol,
-          name: summary.symbol, // Usamos el símbolo como nombre ya que no tenemos el nombre real
+          name: summary.symbol,
           quantity: Number(summary.quantity),
-          currentPrice: Number(purchasePrice.toFixed(2)), // Usamos el precio de compra como precio actual
+          currentPrice: Number(purchasePrice.toFixed(2)),
           profitLoss: {
-            absolute: 0, // Sin precio actual, no podemos calcular beneficio/pérdida
+            absolute: 0,
             percentage: 0,
           },
         };
       });
 
-      // Calculamos el valor total del portfolio basado en precios de compra
+      // Calculamos el valor total del portfolio
       const totalValue = stocks.reduce(
         (sum, stock) => sum + stock.currentPrice * stock.quantity,
         0,
       );
 
       // Actualizamos el valor total en la base de datos
-      await this.portfolioRepository.updateValueAndTimestamp(portfolioId, totalValue);
+      await this.portfolioRepository.updateValueAndTimestamp(portfolio.id, totalValue);
 
-      const portfolioData: CachedPortfolioSummary = {
+      const portfolioData = {
         data: {
           userId: portfolio.user_id,
           totalValue: Number(totalValue.toFixed(2)),
@@ -587,26 +603,18 @@ export class PortfolioService {
         timestamp,
       };
 
-      const response = {
+      // Cache the response
+      await this.cacheService.set(this.generatePortfolioKey(portfolio.id), portfolioData, this.CACHE_TTL);
+      console.log(`Cached portfolio summary for portfolio: ${portfolioId}`);
+
+      return {
         data: portfolioData.data,
         fromCache: false,
         timestamp,
       };
-
-      // Cache the response
-      await this.cachePortfolioSummary(portfolioId, portfolioData);
-      return response;
     } catch (error) {
       console.error('Error getting portfolio summary:', error);
       throw error;
     }
-  }
-
-  /**
-   * Obtiene el valor actual del portfolio
-   */
-  async getPortfolioValue(portfolioId: string): Promise<number> {
-    const summary = await this.getPortfolioSummary(portfolioId);
-    return summary.data.totalValue;
   }
 }
