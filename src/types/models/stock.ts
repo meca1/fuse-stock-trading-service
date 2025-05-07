@@ -1,4 +1,5 @@
 import { ListStocksResponse } from '../vendor/stock-api';
+import { CacheService } from '../../services/cache-service';
 
 /**
  * Stock data from the vendor API
@@ -61,4 +62,22 @@ export const STOCK_CONFIG = {
   CACHE_TTL: 300 * 1000, // 5 minutes in milliseconds
   MAX_PAGES: 10,
   PRICE_VARIATION_THRESHOLD: 0.02 // 2%
-} as const; 
+} as const;
+
+/**
+ * Interface for parameters used in getStocksWithCache method
+ */
+export interface GetStocksWithCacheParams {
+  nextToken?: string;
+  search?: string;
+  cacheService: CacheService;
+  cacheTTL: number;
+}
+
+/**
+ * Interface for result returned by getStocksWithCache method
+ */
+export interface GetStocksWithCacheResult {
+  data: ListStocksResult;
+  cached: boolean;
+} 

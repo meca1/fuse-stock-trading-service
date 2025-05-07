@@ -6,7 +6,9 @@ import {
   ListedStock, 
   ListStocksResult, 
   StockCache,
-  STOCK_CONFIG 
+  STOCK_CONFIG,
+  GetStocksWithCacheParams,
+  GetStocksWithCacheResult
 } from '../types/models/stock';
 import { StockNotFoundError, InvalidPriceError } from '../types/errors/stock-errors';
 import { CacheService } from './cache-service';
@@ -21,7 +23,7 @@ export class StockService {
   private cacheService: CacheService;
 
   constructor(
-    private stockTokenRepository: StockTokenRepository,
+    private stockTokenRepo: StockTokenRepository,
     private vendorApi: VendorApiClient
   ) {
     // Initialize CacheService for verifications
@@ -188,7 +190,7 @@ export class StockService {
             batch.map(async (stock) => {
               if (!processedSymbols.has(stock.symbol)) {
                 try {
-                  await this.stockTokenRepository.saveToken(stock.symbol, currentToken || '');
+                  await this.stockTokenRepo.saveToken(stock.symbol, currentToken || '');
                   processedSymbols.add(stock.symbol);
                 } catch (error) {
                   failedSymbols.push(stock.symbol);
@@ -225,7 +227,7 @@ export class StockService {
         return cachedStock.data;
       }
       
-      const token = await this.stockTokenRepository.getToken(symbol);
+      const token = await this.stockTokenRepo.getToken(symbol);
       
       if (token) {
         try {
@@ -267,7 +269,7 @@ export class StockService {
             exchange: stock.exchange || 'NYSE'
           };
           
-          await this.stockTokenRepository.saveToken(symbol, currentToken || '');
+          await this.stockTokenRepo.saveToken(symbol, currentToken || '');
           
           this.stockCache[symbol] = {
             data: vendorStock,
@@ -322,6 +324,60 @@ export class StockService {
       };
     } catch (error) {
       throw new Error(`Error fetching vendor stocks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Gets stocks with cache handling
+   * @param params Parameters for getting stocks with cache
+   * @returns Object containing stocks data and cache status
+   */
+  public async getStocksWithCache(params: GetStocksWithCacheParams): Promise<GetStocksWithCacheResult> {
+    const { nextToken, search, cacheService, cacheTTL } = params;
+    
+    // Generate cache key
+    const baseKey = search ? `search:${search}` : 'all';
+    const cacheKey = nextToken ? `${baseKey}:page:${nextToken}` : baseKey;
+    
+    try {
+      // Try to get from cache
+      console.log(`Attempting to retrieve from cache: ${cacheKey}`);
+      const cachedData = await cacheService.get<ListStocksResult>(cacheKey);
+      
+      if (cachedData && Array.isArray(cachedData.stocks) && cachedData.stocks.length > 0) {
+        console.log(`[CACHE HIT] Found data for key: ${cacheKey}`);
+        return {
+          data: cachedData,
+          cached: true
+        };
+      }
+      
+      console.log(`[CACHE MISS] No data found for key: ${cacheKey}`);
+      
+      // If not in cache, get from API
+      const result = await this.listAllStocks(nextToken, search);
+      
+      // Save to cache
+      try {
+        console.log(`[CACHE] Saving data for key: ${cacheKey}`);
+        await cacheService.set(cacheKey, result, cacheTTL);
+        console.log('Cache write successful');
+      } catch (err) {
+        console.error(`[CACHE ERROR] Error saving data for key ${cacheKey}:`, err);
+      }
+      
+      return {
+        data: result,
+        cached: false
+      };
+    } catch (err) {
+      console.error(`[CACHE ERROR] Error retrieving data for key ${cacheKey}:`, err);
+      // If cache fails, get from API
+      const result = await this.listAllStocks(nextToken, search);
+      return {
+        data: result,
+        cached: false
+      };
     }
   }
 }
