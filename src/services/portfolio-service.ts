@@ -13,6 +13,7 @@ import { CacheService } from './cache-service';
 import { DatabaseService } from '../config/database';
 import { StockTokenRepository } from '../repositories/stock-token-repository';
 import { VendorApiRepository } from '../repositories/vendor-api-repository';
+import { VendorStock } from '../services/vendor/types/stock-api';
 
 /**
  * Interface for standardized response with cache metadata
@@ -48,18 +49,15 @@ export class PortfolioService {
     private transactionRepository: TransactionRepository,
     private userRepository: UserRepository,
     private stockTokenRepository: StockTokenRepository,
-    public vendorApiRepository: VendorApiRepository,
-    cacheService?: CacheService,
+    private vendorApiRepository: VendorApiRepository,
   ) {
-    this.cacheService =
-      cacheService ||
-      new CacheService({
-        tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
-        region: process.env.DYNAMODB_REGION || 'local',
-        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-        endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
-      });
+    this.cacheService = new CacheService({
+      tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
+      region: process.env.DYNAMODB_REGION || 'local',
+      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+      endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
+    });
 
     // Log configuration
     console.log('[PORTFOLIO CACHE] Initialized with configuration', {
@@ -117,7 +115,6 @@ export class PortfolioService {
       userRepository,
       stockTokenRepository,
       vendorApiRepository,
-      cacheService,
     );
   }
 
@@ -377,20 +374,32 @@ export class PortfolioService {
     type: TransactionType,
   ): Promise<ITransaction> {
     try {
-      // Primero verificamos que el stock existe y obtenemos su precio actual
-      // Esto se hace en paralelo con la obtención del portfolio
-      const [stocksResponse, portfolio] = await Promise.all([
-        this.vendorApiRepository.listStocks(),
-        this.portfolioRepository.findById(portfolioId),
-      ]);
-
-      const stock = stocksResponse.data.items.find(item => item.symbol === symbol);
-      if (!stock) {
-        throw new Error(`Stock with symbol ${symbol} not found`);
-      }
-
+      // Primero obtenemos el portfolio
+      const portfolio = await this.portfolioRepository.findById(portfolioId);
       if (!portfolio) {
         throw new Error(`Portfolio with ID ${portfolioId} not found`);
+      }
+
+      // Buscamos el stock en todas las páginas
+      let stock: VendorStock | undefined;
+      let nextToken: string | undefined;
+      let pageCount = 0;
+      const MAX_PAGES = 10; // Límite de páginas para evitar bucles infinitos
+
+      do {
+        const response = await this.vendorApiRepository.listStocks(nextToken);
+        stock = response.data.items.find(item => item.symbol === symbol);
+        
+        if (stock) {
+          break;
+        }
+
+        nextToken = response.data.nextToken;
+        pageCount++;
+      } while (nextToken && pageCount < MAX_PAGES);
+
+      if (!stock) {
+        throw new Error(`Stock with symbol ${symbol} not found`);
       }
 
       // Validar el precio (2% de variación permitida)
