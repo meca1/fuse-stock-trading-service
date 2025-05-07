@@ -1,5 +1,6 @@
 import { DatabaseService } from '../config/database';
 import { IPortfolio, PortfolioStock } from '../types/models/portfolio';
+import { PortfolioRepositoryError } from '../utils/errors/repository-error';
 
 /**
  * Repository for portfolio-related database operations
@@ -8,10 +9,32 @@ export class PortfolioRepository {
   constructor(private readonly db: DatabaseService) {}
 
   /**
+   * Validates a portfolio ID
+   * @throws {PortfolioRepositoryError} If the ID is invalid
+   */
+  private validatePortfolioId(id: string): void {
+    if (!id || typeof id !== 'string' || id.trim().length === 0) {
+      throw new PortfolioRepositoryError('Invalid portfolio ID');
+    }
+  }
+
+  /**
+   * Validates a user ID
+   * @throws {PortfolioRepositoryError} If the ID is invalid
+   */
+  private validateUserId(userId: string): void {
+    if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
+      throw new PortfolioRepositoryError('Invalid user ID');
+    }
+  }
+
+  /**
    * Finds a portfolio by its ID
    */
   async findById(id: string): Promise<IPortfolio | null> {
     try {
+      this.validatePortfolioId(id);
+      
       const result = await this.db.query(
         'SELECT * FROM portfolios WHERE id = $1',
         [id]
@@ -19,7 +42,10 @@ export class PortfolioRepository {
       return result.rows[0] || null;
     } catch (error) {
       console.error('Error finding portfolio by ID:', error);
-      throw error;
+      throw new PortfolioRepositoryError(
+        `Failed to find portfolio with ID ${id}`,
+        error instanceof Error ? error : undefined
+      );
     }
   }
 
@@ -28,14 +54,19 @@ export class PortfolioRepository {
    */
   async findByUserId(userId: string): Promise<IPortfolio[]> {
     try {
+      this.validateUserId(userId);
+      
       const result = await this.db.query(
-        'SELECT * FROM portfolios WHERE user_id = $1',
+        'SELECT * FROM portfolios WHERE user_id = $1 ORDER BY created_at DESC',
         [userId]
       );
       return result.rows;
     } catch (error) {
       console.error('Error finding portfolios by user ID:', error);
-      throw error;
+      throw new PortfolioRepositoryError(
+        `Failed to find portfolios for user ${userId}`,
+        error instanceof Error ? error : undefined
+      );
     }
   }
 
@@ -44,14 +75,23 @@ export class PortfolioRepository {
    */
   async create(portfolio: Omit<IPortfolio, 'id' | 'created_at' | 'updated_at'>): Promise<IPortfolio> {
     try {
+      this.validateUserId(portfolio.user_id);
+      
+      if (!portfolio.name || portfolio.name.trim().length === 0) {
+        throw new PortfolioRepositoryError('Portfolio name is required');
+      }
+
       const result = await this.db.query(
         'INSERT INTO portfolios (user_id, name) VALUES ($1, $2) RETURNING *',
-        [portfolio.user_id, portfolio.name]
+        [portfolio.user_id, portfolio.name.trim()]
       );
       return result.rows[0];
     } catch (error) {
       console.error('Error creating portfolio:', error);
-      throw error;
+      throw new PortfolioRepositoryError(
+        'Failed to create portfolio',
+        error instanceof Error ? error : undefined
+      );
     }
   }
 
@@ -60,21 +100,30 @@ export class PortfolioRepository {
    */
   async getPortfolioStockSummary(portfolioId: string): Promise<PortfolioStock[]> {
     try {
+      this.validatePortfolioId(portfolioId);
+      
       const result = await this.db.query(`
-        SELECT 
-          stock_symbol as symbol,
-          SUM(CASE WHEN type = 'BUY' THEN quantity ELSE -quantity END) as quantity,
-          SUM(CASE WHEN type = 'BUY' THEN quantity * price ELSE -quantity * price END) as total_cost
-        FROM transactions 
-        WHERE portfolio_id = $1 AND status = 'COMPLETED'
-        GROUP BY stock_symbol
-        HAVING SUM(CASE WHEN type = 'BUY' THEN quantity ELSE -quantity END) > 0
+        WITH stock_summary AS (
+          SELECT 
+            stock_symbol as symbol,
+            SUM(CASE WHEN type = 'BUY' THEN quantity ELSE -quantity END) as quantity,
+            SUM(CASE WHEN type = 'BUY' THEN quantity * price ELSE -quantity * price END) as total_cost
+          FROM transactions 
+          WHERE portfolio_id = $1 AND status = 'COMPLETED'
+          GROUP BY stock_symbol
+        )
+        SELECT * FROM stock_summary
+        WHERE quantity > 0
+        ORDER BY symbol
       `, [portfolioId]);
       
       return result.rows;
     } catch (error) {
       console.error('Error getting portfolio stock summary:', error);
-      throw error;
+      throw new PortfolioRepositoryError(
+        `Failed to get stock summary for portfolio ${portfolioId}`,
+        error instanceof Error ? error : undefined
+      );
     }
   }
 
@@ -83,13 +132,22 @@ export class PortfolioRepository {
    */
   async updateValueAndTimestamp(id: string, value: number): Promise<void> {
     try {
+      this.validatePortfolioId(id);
+      
+      if (value < 0) {
+        throw new PortfolioRepositoryError('Portfolio value cannot be negative');
+      }
+
       await this.db.query(
         'UPDATE portfolios SET total_value = $1, updated_at = NOW() WHERE id = $2',
         [value, id]
       );
     } catch (error) {
       console.error('Error updating portfolio value:', error);
-      throw error;
+      throw new PortfolioRepositoryError(
+        `Failed to update portfolio value for portfolio ${id}`,
+        error instanceof Error ? error : undefined
+      );
     }
   }
 }
