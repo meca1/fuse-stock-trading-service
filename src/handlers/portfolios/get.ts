@@ -1,33 +1,34 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { PortfolioService } from '../../services/portfolio-service';
-import { listPortfoliosParamsSchema } from '../../types/schemas/handlers';
 import middy from '@middy/core';
 import httpErrorHandler from '@middy/http-error-handler';
+
+// Services
+import { PortfolioService } from '../../services/portfolio-service';
+
+// Middleware
 import { apiKeyValidator } from '../../middleware/api-key-validator';
 import { queryParamsValidator } from '../../middleware/query-params-validator';
+import { createResponseValidator } from '../../middleware/response-validator';
 
+// Schemas
+import { listPortfoliosParamsSchema } from '../../types/schemas/handlers';
+import { portfolioResponseSchema } from '../../types/schemas/responses';
+
+// Constants
+import { HTTP_HEADERS, HTTP_STATUS } from '../../constants/http';
 
 /**
  * Handler to get the portfolio summary for a user
  */
 const getPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  // Extract userId from path: /users/{userId}/portfolios
-  const userId = event.pathParameters?.userId;
-  if (!userId) {
-    throw new Error('User ID is required');
-  }
+  const { userId } = event.pathParameters as { userId: string };
   
-  // Initialize portfolio service with all dependencies
   const portfolioService = await PortfolioService.initialize();
-  
-  // Get portfolio summary
   const summary = await portfolioService.getUserPortfolioSummary(userId);
 
   return {
-    statusCode: 200,
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    statusCode: HTTP_STATUS.OK,
+    headers: HTTP_HEADERS,
     body: JSON.stringify({
       status: 'success',
       data: summary.data,
@@ -43,4 +44,5 @@ const getPortfoliosHandler = async (event: APIGatewayProxyEvent): Promise<APIGat
 export const handler = middy(getPortfoliosHandler)
   .use(apiKeyValidator())
   .use(queryParamsValidator(listPortfoliosParamsSchema))
-  .use(httpErrorHandler());
+  .use(httpErrorHandler())
+  .use(createResponseValidator(portfolioResponseSchema));

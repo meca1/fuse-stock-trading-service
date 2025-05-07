@@ -1,0 +1,25 @@
+import { z } from 'zod';
+
+export const portfolioResponseSchema = z.object({
+  status: z.literal('success'),
+  data: z.object({
+    userId: z.string(),
+    totalValue: z.number(),
+    currency: z.string(),
+    lastUpdated: z.string(),
+    stocks: z.array(z.object({
+      symbol: z.string(),
+      name: z.string(),
+      quantity: z.number(),
+      currentPrice: z.number(),
+      profitLoss: z.object({
+        absolute: z.number(),
+        percentage: z.number()
+      })
+    }))
+  }),
+  metadata: z.object({
+    cached: z.boolean(),
+    timestamp: z.string()
+  })
+}); 
