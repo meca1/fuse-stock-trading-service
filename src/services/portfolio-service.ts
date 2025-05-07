@@ -1,5 +1,7 @@
 import { PortfolioRepository } from '../repositories/portfolio-repository';
 import { TransactionRepository } from '../repositories/transaction-repository';
+import { UserRepository } from '../repositories/user-repository';
+import { VendorApiRepository } from '../repositories/vendor-api-repository';
 import {
   IPortfolio,
   PortfolioSummaryResponse,
@@ -8,10 +10,6 @@ import {
 } from '../types/models/portfolio';
 import { ITransaction } from '../types/models/transaction';
 import { TransactionType, TransactionStatus } from '../types/common/enums';
-import { UserRepository } from '../repositories/user-repository';
-import { CacheService } from './cache-service';
-import { DatabaseService } from '../config/database';
-import { VendorApiRepository } from '../repositories/vendor-api-repository';
 import { VendorStock } from '../services/vendor/types/stock-api';
 
 /**
@@ -38,7 +36,6 @@ interface PortfolioServiceInitOptions {
  * Service to handle portfolio-related operations and caching
  */
 export class PortfolioService {
-  private cacheService: CacheService;
   private readonly CACHE_TTL = 300; // 5 minutes
   private isEnabled: boolean = true;
 
@@ -47,50 +44,16 @@ export class PortfolioService {
     private transactionRepository: TransactionRepository,
     private userRepository: UserRepository,
     private vendorApiRepository: VendorApiRepository,
-  ) {
-    this.cacheService = new CacheService({
-      tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
-      region: process.env.DYNAMODB_REGION || 'local',
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-      endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
-    });
-
-    // Log configuration
-    console.log('[PORTFOLIO CACHE] Initialized with configuration', {
-      tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
-      ttl: this.CACHE_TTL,
-      isEnabled: this.isEnabled,
-    });
-  }
+  ) {}
 
   /**
    * Creates and initializes a new instance of PortfolioService with all required dependencies
-   * @param options Optional configuration for service initialization
    * @returns Promise with initialized PortfolioService instance
    */
-  public static async initialize(
-    options: PortfolioServiceInitOptions = {},
-  ): Promise<PortfolioService> {
-    const dbService = await DatabaseService.getInstance();
-
-    const portfolioRepository = new PortfolioRepository(dbService);
-    const transactionRepository = new TransactionRepository(dbService);
-    const userRepository = new UserRepository(dbService);
-
-    // Initialize cache service with provided options or defaults
-    const cacheService = new CacheService({
-      tableName:
-        options.portfolioCacheTable ||
-        process.env.PORTFOLIO_CACHE_TABLE ||
-        'fuse-portfolio-cache-local',
-      region: options.region || process.env.DYNAMODB_REGION || 'local',
-      accessKeyId: options.accessKeyId || process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: options.secretAccessKey || process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-      endpoint: options.endpoint || process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
-    });
-
-    // Initialize vendor API repository
+  public static async initialize(): Promise<PortfolioService> {
+    const portfolioRepository = await PortfolioRepository.initialize();
+    const transactionRepository = await TransactionRepository.initialize();
+    const userRepository = await UserRepository.initialize();
     const vendorApiRepository = new VendorApiRepository();
 
     return new PortfolioService(
@@ -116,20 +79,6 @@ export class PortfolioService {
   }
 
   /**
-   * Check if the cache table exists and is accessible
-   */
-  private async checkTableExists(): Promise<boolean> {
-    try {
-      return await this.cacheService.checkTableExists();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[PORTFOLIO CACHE ERROR] Table check failed:`, errorMessage);
-      this.isEnabled = false;
-      return false;
-    }
-  }
-
-  /**
    * Get cached portfolio summary for a user
    */
   private async getCachedUserPortfolioSummary(
@@ -144,7 +93,7 @@ export class PortfolioService {
       console.log(`[PORTFOLIO CACHE] Attempting to retrieve portfolio for user: ${userId}`);
       const cacheKey = this.generateUserPortfolioKey(userId);
 
-      const cachedData = await this.cacheService.get<CachedUserPortfolioSummary>(cacheKey);
+      const cachedData = await this.portfolioRepository.getCachedSummary<CachedUserPortfolioSummary>(cacheKey);
       if (cachedData) {
         console.log(`[PORTFOLIO CACHE HIT] Found cached portfolio for user: ${userId}`);
         return cachedData;
@@ -171,7 +120,6 @@ export class PortfolioService {
     }
 
     try {
-      await this.checkTableExists();
       const key = this.generateUserPortfolioKey(userId);
 
       // Ensure data has a timestamp if not provided
@@ -179,7 +127,7 @@ export class PortfolioService {
         data.timestamp = new Date().toISOString();
       }
 
-      await this.cacheService.set(key, data, this.CACHE_TTL);
+      await this.portfolioRepository.cacheSummary(key, data, this.CACHE_TTL);
       console.log(`Cached portfolio summary for user: ${userId}`);
     } catch (error) {
       console.error('Error caching user portfolio summary:', error);
@@ -202,7 +150,7 @@ export class PortfolioService {
       console.log(`[PORTFOLIO CACHE] Attempting to retrieve portfolio: ${portfolioId}`);
       const cacheKey = this.generatePortfolioKey(portfolioId);
 
-      const cachedData = await this.cacheService.get<CachedPortfolioSummary>(cacheKey);
+      const cachedData = await this.portfolioRepository.getCachedSummary<CachedPortfolioSummary>(cacheKey);
       if (cachedData) {
         console.log(`[PORTFOLIO CACHE HIT] Found cached portfolio: ${portfolioId}`);
         return cachedData;
@@ -232,7 +180,6 @@ export class PortfolioService {
     }
 
     try {
-      await this.checkTableExists();
       const key = this.generatePortfolioKey(portfolioId);
 
       // Ensure data has a timestamp if not provided
@@ -240,7 +187,7 @@ export class PortfolioService {
         data.timestamp = new Date().toISOString();
       }
 
-      await this.cacheService.set(key, data, this.CACHE_TTL);
+      await this.portfolioRepository.cacheSummary(key, data, this.CACHE_TTL);
       console.log(`Cached portfolio summary for portfolio: ${portfolioId}`);
     } catch (error) {
       console.error('Error caching portfolio summary:', error);
@@ -261,7 +208,7 @@ export class PortfolioService {
       console.log(`[PORTFOLIO CACHE] Invalidating cache for user: ${userId}`);
       const cacheKey = this.generateUserPortfolioKey(userId);
 
-      await this.cacheService.delete(cacheKey);
+      await this.portfolioRepository.invalidateCache(cacheKey);
       console.log(`[PORTFOLIO CACHE] Successfully invalidated cache for user: ${userId}`);
     } catch (error) {
       console.error(`[PORTFOLIO CACHE ERROR] Error invalidating cache for user ${userId}:`, error);
@@ -281,7 +228,7 @@ export class PortfolioService {
       console.log(`[PORTFOLIO CACHE] Invalidating cache for portfolio: ${portfolioId}`);
       const cacheKey = this.generatePortfolioKey(portfolioId);
 
-      await this.cacheService.delete(cacheKey);
+      await this.portfolioRepository.invalidateCache(cacheKey);
       console.log(`[PORTFOLIO CACHE] Successfully invalidated cache for portfolio: ${portfolioId}`);
     } catch (error) {
       console.error(

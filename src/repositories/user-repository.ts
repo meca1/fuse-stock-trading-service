@@ -1,8 +1,21 @@
 import { DatabaseService } from '../config/database';
 import { IUser } from '../types/models/user';
+import { UserRepositoryError } from '../utils/errors/repository-error';
 
+/**
+ * Repository for user-related database operations
+ */
 export class UserRepository {
   constructor(private readonly db: DatabaseService) {}
+
+  /**
+   * Creates and initializes a new instance of UserRepository
+   * @returns Promise with initialized UserRepository instance
+   */
+  public static async initialize(): Promise<UserRepository> {
+    const dbService = await DatabaseService.getInstance();
+    return new UserRepository(dbService);
+  }
 
   /**
    * Finds a user by their unique ID.

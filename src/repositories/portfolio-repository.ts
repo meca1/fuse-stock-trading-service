@@ -1,12 +1,67 @@
 import { DatabaseService } from '../config/database';
-import { IPortfolio, PortfolioStock } from '../types/models/portfolio';
+import { IPortfolio, PortfolioStock, CachedPortfolioSummary, CachedUserPortfolioSummary } from '../types/models/portfolio';
 import { PortfolioRepositoryError } from '../utils/errors/repository-error';
+import { CacheService } from '../services/cache-service';
 
 /**
  * Repository for portfolio-related database operations
  */
 export class PortfolioRepository {
-  constructor(private readonly db: DatabaseService) {}
+  private cacheService: CacheService;
+  private readonly CACHE_TTL = 300; // 5 minutes
+
+  constructor(private readonly db: DatabaseService) {
+    this.cacheService = new CacheService({
+      tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
+      region: process.env.DYNAMODB_REGION || 'local',
+      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+      endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
+    });
+  }
+
+  /**
+   * Creates and initializes a new instance of PortfolioRepository
+   * @returns Promise with initialized PortfolioRepository instance
+   */
+  public static async initialize(): Promise<PortfolioRepository> {
+    const dbService = await DatabaseService.getInstance();
+    return new PortfolioRepository(dbService);
+  }
+
+  /**
+   * Gets a cached summary
+   */
+  async getCachedSummary<T>(key: string): Promise<T | null> {
+    try {
+      return await this.cacheService.get<T>(key);
+    } catch (error) {
+      console.error(`Error getting cached summary for key ${key}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Caches a summary
+   */
+  async cacheSummary<T>(key: string, data: T, ttl: number): Promise<void> {
+    try {
+      await this.cacheService.set(key, data, ttl);
+    } catch (error) {
+      console.error(`Error caching summary for key ${key}:`, error);
+    }
+  }
+
+  /**
+   * Invalidates a cached summary
+   */
+  async invalidateCache(key: string): Promise<void> {
+    try {
+      await this.cacheService.delete(key);
+    } catch (error) {
+      console.error(`Error invalidating cache for key ${key}:`, error);
+    }
+  }
 
   /**
    * Validates a portfolio ID

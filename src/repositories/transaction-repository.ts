@@ -1,11 +1,21 @@
 import { DatabaseService } from '../config/database';
 import { ITransaction } from '../types/models/transaction';
+import { TransactionRepositoryError } from '../utils/errors/repository-error';
 
 /**
  * Repository for transaction-related database operations
  */
 export class TransactionRepository {
   constructor(private readonly db: DatabaseService) {}
+
+  /**
+   * Creates and initializes a new instance of TransactionRepository
+   * @returns Promise with initialized TransactionRepository instance
+   */
+  public static async initialize(): Promise<TransactionRepository> {
+    const dbService = await DatabaseService.getInstance();
+    return new TransactionRepository(dbService);
+  }
 
   /**
    * Creates a new transaction
