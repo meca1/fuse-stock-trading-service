@@ -406,6 +406,40 @@ export class PortfolioService {
   }
 
   /**
+   * Executes a stock purchase for a user
+   */
+  async buyStock(
+    userId: string,
+    symbol: string,
+    quantity: number,
+    price: number
+  ): Promise<ITransaction> {
+    try {
+      // Get or create portfolio
+      const portfolios = await this.getUserPortfolios(userId);
+      let portfolio;
+      
+      if (!portfolios || portfolios.length === 0) {
+        portfolio = await this.createPortfolio(userId, 'Default Portfolio');
+      } else {
+        portfolio = portfolios[0];
+      }
+
+      // Execute the purchase
+      return await this.executeStockPurchase(
+        portfolio.id,
+        symbol,
+        quantity,
+        price,
+        TransactionType.BUY
+      );
+    } catch (error) {
+      console.error('Error buying stock:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Gets a summary of all portfolios for a user
    */
   async getUserPortfolioSummary(userId: string): Promise<PortfolioResponseWithCache> {

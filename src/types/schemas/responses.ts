@@ -67,4 +67,20 @@ export const updateStockTokensResponseSchema = z.object({
   data: z.object({
     message: z.string()
   })
+});
+
+export const buyStockResponseSchema = z.object({
+  status: z.literal('success'),
+  data: z.object({
+    id: z.string(),
+    portfolio_id: z.string(),
+    stock_symbol: z.string(),
+    type: z.string(),
+    quantity: z.number(),
+    price: z.string(),
+    status: z.string(),
+    created_at: z.string(),
+    updated_at: z.string(),
+    executionTime: z.string()
+  })
 }); 
