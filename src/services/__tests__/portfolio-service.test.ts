@@ -6,17 +6,23 @@ import { StockService } from '../stock-service';
 import { IPortfolio } from '../../types/models/portfolio';
 import { ITransaction } from '../../types/models/transaction';
 import { TransactionType } from '../../types/common/enums';
-import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
+import { CacheService } from '../cache-service';
+
+// Mock CacheService
+jest.mock('../cache-service');
 
 describe('PortfolioService', () => {
   let portfolioRepository: jest.Mocked<PortfolioRepository>;
   let transactionRepository: jest.Mocked<TransactionRepository>;
   let userRepository: jest.Mocked<UserRepository>;
   let stockService: jest.Mocked<StockService>;
-  let mockDynamoDb: jest.Mocked<DynamoDBDocument>;
+  let mockCacheService: jest.Mocked<CacheService>;
   let service: PortfolioService;
 
   beforeEach(() => {
+    // Reset all mocks
+    jest.clearAllMocks();
+
     portfolioRepository = { 
       findById: jest.fn(), 
       findByUserId: jest.fn(), 
@@ -34,19 +40,15 @@ describe('PortfolioService', () => {
       buyStock: jest.fn().mockResolvedValue({ status: 200, message: 'Success', data: { order: { transactionId: 'tx123' } } })
     } as any;
     
-    // Mock DynamoDB client
-    mockDynamoDb = {
+    // Create mock CacheService
+    mockCacheService = {
       get: jest.fn(),
-      put: jest.fn(),
+      set: jest.fn(),
       delete: jest.fn(),
-      update: jest.fn(),
-      query: jest.fn(),
-      scan: jest.fn(),
-      batchGet: jest.fn(),
-      batchWrite: jest.fn(),
-      transactGet: jest.fn(),
-      transactWrite: jest.fn(),
-      createSet: jest.fn(),
+      checkTableExists: jest.fn(),
+      client: {} as any,
+      docClient: {} as any,
+      tableName: 'test-table'
     } as any;
     
     service = new PortfolioService(
@@ -54,6 +56,7 @@ describe('PortfolioService', () => {
       transactionRepository, 
       userRepository, 
       stockService,
+      mockCacheService
     );
 
     // Mock console methods to avoid cluttering test output
@@ -112,7 +115,7 @@ describe('PortfolioService', () => {
     
     const result = await service.executeStockPurchase('1', 'AAPL', 1, 100, TransactionType.BUY);
     expect(result).toBeDefined();
-    expect(mockDynamoDb.delete).toHaveBeenCalled();
+    expect(mockCacheService.delete).toHaveBeenCalled();
   });
 
   it('getUserPortfolioSummary returns summary with zero if no portfolios', async () => {
@@ -159,71 +162,38 @@ describe('PortfolioService', () => {
   });
 
   describe('Cache operations', () => {
+    const mockData = {
+      data: {
+        userId: 'u1',
+        totalValue: 1000,
+        currency: 'USD',
+        lastUpdated: new Date().toISOString(),
+        stocks: []
+      },
+      timestamp: new Date().toISOString()
+    };
+
     it('should cache portfolio summary', async () => {
-      const mockData = {
-        data: {
-          userId: 'u1',
-          totalValue: 1000,
-          currency: 'USD',
-          lastUpdated: new Date().toISOString(),
-          stocks: []
-        },
-        timestamp: new Date().toISOString()
-      };
-
-      mockDynamoDb.put.mockReturnValue({
-        promise: jest.fn().mockResolvedValue({})
-      } as any);
-
       await service['cachePortfolioSummary']('1', mockData);
 
-      expect(mockDynamoDb.put).toHaveBeenCalledWith({
-        TableName: expect.any(String),
-        Item: {
-          key: 'portfolio:id:1',
-          data: mockData,
-          ttl: expect.any(Number)
-        }
-      });
+      expect(mockCacheService.set).toHaveBeenCalledWith(
+        'portfolio:id:1',
+        mockData,
+        expect.any(Number)
+      );
     });
 
     it('should get cached portfolio summary', async () => {
-      const mockData = {
-        data: {
-          userId: 'u1',
-          totalValue: 1000,
-          currency: 'USD',
-          lastUpdated: new Date().toISOString(),
-          stocks: []
-        },
-        timestamp: new Date().toISOString()
-      };
-
-      mockDynamoDb.get.mockReturnValue({
-        promise: jest.fn().mockResolvedValue({
-          Item: {
-            key: 'portfolio:id:1',
-            data: mockData,
-            ttl: Math.floor(Date.now() / 1000) + 300
-          }
-        })
-      } as any);
+      mockCacheService.get.mockResolvedValueOnce(mockData);
 
       const result = await service['getCachedPortfolioSummary']('1');
       expect(result).toEqual(mockData);
     });
 
     it('should invalidate portfolio cache', async () => {
-      mockDynamoDb.delete.mockReturnValue({
-        promise: jest.fn().mockResolvedValue({})
-      } as any);
-
       await service['invalidatePortfolioCache']('1');
 
-      expect(mockDynamoDb.delete).toHaveBeenCalledWith({
-        TableName: expect.any(String),
-        Key: { key: 'portfolio:id:1' }
-      });
+      expect(mockCacheService.delete).toHaveBeenCalledWith('portfolio:id:1');
     });
   });
 }); 
