@@ -24,9 +24,10 @@ export interface ReportData {
 }
 
 /**
- * Interface for the report service
+ * Interface for email parameters
  */
-export interface IReportService {
-  generateDailyReport(date: string): Promise<ReportData>;
-  formatReportAsHtml(reportData: ReportData): string;
+export interface EmailParams {
+  recipients: string[];
+  subject: string;
+  reportData: ReportData;
 } 

@@ -3,9 +3,11 @@ import { DatabaseService } from '../../config/database';
 import { TransactionRepository } from '../../repositories/transaction-repository';
 import { ReportService } from '../../services/report-service';
 import { EmailService } from '../../services/email-service';
-import { IReportService, IEmailService } from '../../services/service-types';
+import { IReportService } from '../../types/services/report-service';
+import { IEmailService } from '../../types/services/email-service';
+import { ReportData } from '../../types/models/shared';
 import { wrapHandler } from '../../middleware/lambda-error-handler';
-import { AppError, AuthenticationError } from '../../utils/errors/app-error';
+import { AuthenticationError } from '../../utils/errors/app-error';
 import { apiKeySchema } from '../../types/schemas/handlers';
 import { handleZodError } from '../../middleware/zod-error-handler';
 
@@ -44,22 +46,11 @@ const dailyReportHandler = async (event: APIGatewayProxyEvent): Promise<APIGatew
     const reportService: IReportService = new ReportService(transactionRepository);
     
     // Get date from event or use today as default
-    let dateStr;
-    
-    if (event.queryStringParameters && event.queryStringParameters.date) {
-      dateStr = event.queryStringParameters.date;
-      console.log(`Using provided date: ${dateStr}`);
-    } else {
-      // Default to today's date if not specified
-      const today = new Date();
-      dateStr = today.toISOString().split('T')[0];
-      console.log(`Using default date (today): ${dateStr}`);
-    }
-    
+    const dateStr = event.queryStringParameters?.date || new Date().toISOString().split('T')[0];
     console.log(`Generating report for date: ${dateStr}`);
     
     // Generate report
-    const report = await reportService.generateDailyReport(dateStr);
+    const report: ReportData = await reportService.generateDailyReport(dateStr);
     
     // Send by email
     const emailService: IEmailService = new EmailService();
@@ -80,12 +71,21 @@ const dailyReportHandler = async (event: APIGatewayProxyEvent): Promise<APIGatew
         message: 'Daily report generated and sent successfully',
         date: dateStr,
         recipients,
-        executionTime
+        executionTime,
+        reportSummary: {
+          totalTransactions: report.totalTransactions,
+          successfulTransactions: report.successfulTransactions.length,
+          failedTransactions: report.failedTransactions.length,
+          totalAmount: report.totals.totalAmount
+        }
       })
     };
   } catch (error) {
     console.error('Error generating daily report:', error);
-    throw error;
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('An unexpected error occurred while generating the daily report');
   }
 };
 

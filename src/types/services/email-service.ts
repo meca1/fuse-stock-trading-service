@@ -1,0 +1,8 @@
+import { EmailParams } from '../models/shared';
+
+/**
+ * Interface for email service
+ */
+export interface IEmailService {
+  sendReportEmail(params: EmailParams): Promise<void>;
+} 
