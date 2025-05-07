@@ -1,4 +1,3 @@
-import { ListStocksResponse } from '../vendor/stock-api';
 import { CacheService } from '../../services/cache-service';
 
 /**
