@@ -1,73 +1,53 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DatabaseService } from '../../config/database';
-import { TransactionRepository } from '../../repositories/transaction-repository';
+import middy from '@middy/core';
+import httpErrorHandler from '@middy/http-error-handler';
+
+// Services
 import { ReportService } from '../../services/report-service';
 import { EmailService } from '../../services/email-service';
-import { IReportService } from '../../types/services/report-service';
-import { IEmailService } from '../../types/services/email-service';
-import { ReportData } from '../../types/models/shared';
-import { wrapHandler } from '../../middleware/lambda-error-handler';
-import { AuthenticationError } from '../../utils/errors/app-error';
-import { apiKeySchema } from '../../types/schemas/handlers';
-import { handleZodError } from '../../middleware/zod-error-handler';
+
+// Middleware
+import { apiKeyValidator } from '../../middleware/api-key-validator';
+import { queryParamsValidator } from '../../middleware/query-params-validator';
+import { createResponseValidator } from '../../middleware/response-validator';
+
+// Schemas
+import { dailyReportQuerySchema } from '../../types/schemas/handlers';
+import { dailyReportResponseSchema } from '../../types/schemas/responses';
+
+// Constants
+import { HTTP_HEADERS, HTTP_STATUS } from '../../constants/http';
 
 /**
  * Handler to generate and send daily transaction reports
  */
 const dailyReportHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const startTime = Date.now();
-  console.log('Starting daily report generation...', {
-    headers: event.headers ? {
-      'x-api-key-exists': !!event.headers['x-api-key'],
-      'X-API-Key-exists': !!event.headers['X-API-Key']
-    } : 'No headers'
+  const dateStr = event.queryStringParameters?.date || new Date().toISOString().split('T')[0];
+  
+  // Initialize services
+  const reportService = await ReportService.initialize();
+  const emailService = await EmailService.initialize();
+  
+  // Generate report
+  const report = await reportService.generateDailyReport(dateStr);
+  
+  // Send by email
+  const recipients = process.env.REPORT_RECIPIENTS?.split(',') || ['admin@example.com'];
+  await emailService.sendReportEmail({
+    recipients,
+    subject: `Daily Transaction Report - ${dateStr}`,
+    reportData: report
   });
   
-  // Validate API key if this is an API Gateway event
-  if (event.headers) {
-    const apiKey = event.headers['x-api-key'] || event.headers['X-API-Key'];
-    const apiKeyResult = apiKeySchema.safeParse(apiKey);
-    
-    if (!apiKeyResult.success) {
-      throw handleZodError(apiKeyResult.error);
-    }
-
-    if (apiKey !== process.env.VENDOR_API_KEY) {
-      throw new AuthenticationError('Invalid API key');
-    }
-  }
-
-  try {
-    // Initialize services
-    const dbService = await DatabaseService.getInstance();
-    const transactionRepository = new TransactionRepository(dbService);
-    
-    // Initialize report service
-    const reportService: IReportService = new ReportService(transactionRepository);
-    
-    // Get date from event or use today as default
-    const dateStr = event.queryStringParameters?.date || new Date().toISOString().split('T')[0];
-    console.log(`Generating report for date: ${dateStr}`);
-    
-    // Generate report
-    const report: ReportData = await reportService.generateDailyReport(dateStr);
-    
-    // Send by email
-    const emailService: IEmailService = new EmailService();
-    const recipients = process.env.REPORT_RECIPIENTS?.split(',') || ['admin@example.com'];
-    
-    await emailService.sendReportEmail({
-      recipients,
-      subject: `Daily Transaction Report - ${dateStr}`,
-      reportData: report
-    });
-    
-    const executionTime = Date.now() - startTime;
-    console.log(`Daily report generated and sent in ${executionTime}ms`);
-    
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
+  const executionTime = Date.now() - startTime;
+  
+  return {
+    statusCode: HTTP_STATUS.OK,
+    headers: HTTP_HEADERS,
+    body: JSON.stringify({
+      status: 'success',
+      data: {
         message: 'Daily report generated and sent successfully',
         date: dateStr,
         recipients,
@@ -78,15 +58,14 @@ const dailyReportHandler = async (event: APIGatewayProxyEvent): Promise<APIGatew
           failedTransactions: report.failedTransactions.length,
           totalAmount: report.totals.totalAmount
         }
-      })
-    };
-  } catch (error) {
-    console.error('Error generating daily report:', error);
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error('An unexpected error occurred while generating the daily report');
-  }
+      }
+    })
+  };
 };
 
-export const handler = wrapHandler(dailyReportHandler); 
+// Export the handler wrapped with Middy middleware
+export const handler = middy(dailyReportHandler)
+  .use(apiKeyValidator())
+  .use(queryParamsValidator(dailyReportQuerySchema))
+  .use(httpErrorHandler())
+  .use(createResponseValidator(dailyReportResponseSchema)); 

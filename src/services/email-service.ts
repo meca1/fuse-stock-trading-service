@@ -1,6 +1,8 @@
 import { SendEmailCommandInput, SES } from '@aws-sdk/client-ses';
 import * as nodemailer from 'nodemailer';
 import { EmailParams } from '../types/models/shared';
+import { IEmailService } from '../types/services/email-service';
+import { ReportData } from '../types/models/shared';
 
 // Interfaces
 
@@ -8,7 +10,7 @@ import { EmailParams } from '../types/models/shared';
  * Servicio para el envío de emails
  * Soporta múltiples proveedores según el entorno (AWS SES o SMTP local)
  */
-export class EmailService {
+export class EmailService implements IEmailService {
   private ses: SES | null = null;
   private transporter: nodemailer.Transporter | null = null;
   private readonly reportService: any; // ReportService
@@ -25,6 +27,14 @@ export class EmailService {
     } else {
       this.initializeSMTP();
     }
+  }
+  
+  /**
+   * Creates and initializes a new instance of EmailService
+   * @returns Promise with initialized EmailService instance
+   */
+  public static async initialize(): Promise<EmailService> {
+    return new EmailService();
   }
   
   /**

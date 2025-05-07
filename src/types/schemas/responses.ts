@@ -44,4 +44,20 @@ export const stocksResponseSchema = z.object({
   metadata: z.object({
     cached: z.boolean()
   })
+});
+
+export const dailyReportResponseSchema = z.object({
+  status: z.literal('success'),
+  data: z.object({
+    message: z.string(),
+    date: z.string(),
+    recipients: z.array(z.string()),
+    executionTime: z.number(),
+    reportSummary: z.object({
+      totalTransactions: z.number(),
+      successfulTransactions: z.number(),
+      failedTransactions: z.number(),
+      totalAmount: z.number()
+    })
+  })
 }); 

@@ -44,3 +44,7 @@ export const listPortfoliosParamsSchema = z.object({
 export const updateStockTokensEventSchema = z.object({
   // Add any specific event validation if needed
 }).passthrough(); // Allow additional properties since it's a CloudWatch event 
+
+export const dailyReportQuerySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+}); 

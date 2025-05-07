@@ -3,12 +3,23 @@ import { ITransaction } from '../types/models/transaction';
 import { TransactionStatus } from '../types/common/enums';
 import { IReportService } from '../types/services/report-service';
 import { ReportData } from '../types/models/shared';
+import { DatabaseService } from '../config/database';
 
 /**
  * Service for generating transaction reports
  */
 export class ReportService implements IReportService {
   constructor(private readonly transactionRepository: TransactionRepository) {}
+
+  /**
+   * Creates and initializes a new instance of ReportService with all required dependencies
+   * @returns Promise with initialized ReportService instance
+   */
+  public static async initialize(): Promise<ReportService> {
+    const dbService = await DatabaseService.getInstance();
+    const transactionRepository = new TransactionRepository(dbService);
+    return new ReportService(transactionRepository);
+  }
 
   /**
    * Generates a daily transaction report for a specific date
