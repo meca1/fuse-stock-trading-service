@@ -1,26 +1,6 @@
 version: '3.8'
 
 services:     
-  migrations:
-    build: 
-      context: .
-      dockerfile: Dockerfile
-    environment:
-      - NODE_ENV=development
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=stock_trading
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/stock_trading?sslmode=disable
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - .:/app
-      - /app/node_modules
-    command: sh -c "npm install && npm run db:migrate"
-
   postgres:
     image: postgres:13.18-alpine
     ports:
@@ -37,6 +17,17 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  migrations:
+    image: amacneil/dbmate
+    command: -d "/db/migrations" up
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/stock_trading?sslmode=disable
+    volumes:
+      - ./db/migrations:/db/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
       
   dynamodb:
     image: amazon/dynamodb-local:latest

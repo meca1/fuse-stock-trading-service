@@ -13,25 +13,23 @@
 
 set -e
 
-# Set up permissions and extensions
+# Create the public schema
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-  -- Create schema
   CREATE SCHEMA IF NOT EXISTS public;
-  
-  -- Set up permissions
-  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $POSTGRES_USER;
-  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $POSTGRES_USER;
-  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO $POSTGRES_USER;
-  
-  -- Create useful extensions
+    GRANT ALL ON SCHEMA public TO postgres;
+    GRANT ALL ON SCHEMA public TO public;
+    COMMENT ON DATABASE stock_trading IS 'Stock Trading Service Database';
+EOSQL
+
+# Create necessary extensions
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
   CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
   CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-  
-  -- Set up timezone
-  SET timezone = 'UTC';
-  
-  -- Add database comment
-  COMMENT ON DATABASE $POSTGRES_DB IS 'Stock Trading Service Database for Fuse Finance Challenge';
+EOSQL
+
+# Set timezone
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+    ALTER DATABASE stock_trading SET timezone TO 'UTC';
 EOSQL
 
 echo "✅ PostgreSQL initialized with required extensions and configurations"
