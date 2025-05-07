@@ -2,7 +2,6 @@ import { PortfolioRepository } from '../repositories/portfolio-repository';
 import { TransactionRepository } from '../repositories/transaction-repository';
 import { 
   IPortfolio, 
-  PortfolioStock, 
   PortfolioSummaryResponse,
   CachedPortfolioSummary,
   CachedUserPortfolioSummary
@@ -12,6 +11,7 @@ import { TransactionType, TransactionStatus } from '../types/common/enums';
 import { StockService } from './stock-service';
 import { UserRepository } from '../repositories/user-repository';
 import { CacheService } from './cache-service';
+import { DatabaseService } from '../config/database';
 
 /**
  * Interface for standardized response with cache metadata
@@ -23,10 +23,23 @@ interface PortfolioResponseWithCache {
 }
 
 /**
+ * Interface for service initialization options
+ */
+interface PortfolioServiceInitOptions {
+  portfolioCacheTable?: string;
+  stockTokensTable?: string;
+  region?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  endpoint?: string;
+}
+
+/**
  * Service to handle portfolio-related operations and caching
  */
 export class PortfolioService {
   private cacheService: CacheService;
+  private stockService!: StockService; // Using definite assignment assertion
   private readonly CACHE_TTL = 300; // 5 minutes
   private isEnabled: boolean = true;
 
@@ -34,32 +47,97 @@ export class PortfolioService {
     private portfolioRepository: PortfolioRepository,
     private transactionRepository: TransactionRepository,
     private userRepository: UserRepository,
-    private stockService: StockService,
-    cacheService?: CacheService,
-    tableName: string = process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
-    isEnabled: boolean = true
+    stockService?: StockService,
+    cacheService?: CacheService
   ) {
-    // Initialize CacheService if not provided
-    if (!cacheService) {
-      this.cacheService = new CacheService({
-        tableName,
-        region: process.env.DYNAMODB_REGION || 'us-east-1',
-        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-        endpoint: process.env.DYNAMODB_ENDPOINT
-      });
-    } else {
-      this.cacheService = cacheService;
+    this.cacheService = cacheService || new CacheService({
+      tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
+      region: process.env.DYNAMODB_REGION || 'local',
+      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+      endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
+    });
+
+    if (stockService) {
+      this.stockService = stockService;
     }
-    
-    this.isEnabled = isEnabled;
     
     // Log configuration
     console.log('[PORTFOLIO CACHE] Initialized with configuration', {
-      tableName,
+      tableName: process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
       ttl: this.CACHE_TTL,
       isEnabled: this.isEnabled
     });
+  }
+
+  /**
+   * Initialize the service with required dependencies
+   */
+  private async initialize(): Promise<void> {
+    if (!this.stockService) {
+      this.stockService = await PortfolioService.createStockService();
+    }
+  }
+
+  /**
+   * Creates and initializes a new instance of PortfolioService with all required dependencies
+   * @param options Optional configuration for service initialization
+   * @returns Promise with initialized PortfolioService instance
+   */
+  public static async initialize(options: PortfolioServiceInitOptions = {}): Promise<PortfolioService> {
+    const dbService = await DatabaseService.getInstance();
+    
+    const portfolioRepository = new PortfolioRepository(dbService);
+    const transactionRepository = new TransactionRepository(dbService);
+    const userRepository = new UserRepository(dbService);
+
+    // Initialize cache service with provided options or defaults
+    const cacheService = new CacheService({
+      tableName: options.portfolioCacheTable || process.env.PORTFOLIO_CACHE_TABLE || 'fuse-portfolio-cache-local',
+      region: options.region || process.env.DYNAMODB_REGION || 'local',
+      accessKeyId: options.accessKeyId || process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+      secretAccessKey: options.secretAccessKey || process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+      endpoint: options.endpoint || process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
+    });
+
+    // Initialize stock service
+    const stockService = await this.createStockService(options);
+
+    const service = new PortfolioService(
+      portfolioRepository,
+      transactionRepository,
+      userRepository,
+      stockService,
+      cacheService
+    );
+
+    await service.initialize();
+    return service;
+  }
+
+  /**
+   * Creates a new instance of StockService with required dependencies
+   * @param options Optional configuration for service initialization
+   * @returns Promise with initialized StockService instance
+   */
+  private static async createStockService(options: PortfolioServiceInitOptions = {}): Promise<StockService> {
+    const { StockService } = await import('./stock-service');
+    const { StockTokenRepository } = await import('../repositories/stock-token-repository');
+    const { VendorApiClient } = await import('./vendor/api-client');
+    const { VendorApiRepository } = await import('../repositories/vendor-api-repository');
+
+    const stockTokenRepo = new StockTokenRepository(new CacheService({
+      tableName: options.stockTokensTable || process.env.DYNAMODB_TABLE || 'fuse-stock-tokens-local',
+      region: options.region || process.env.DYNAMODB_REGION || 'local',
+      accessKeyId: options.accessKeyId || process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
+      secretAccessKey: options.secretAccessKey || process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
+      endpoint: options.endpoint || process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
+    }));
+
+    const vendorApiRepository = new VendorApiRepository();
+    const vendorApi = new VendorApiClient(vendorApiRepository);
+    
+    return new StockService(stockTokenRepo, vendorApi);
   }
 
   /**

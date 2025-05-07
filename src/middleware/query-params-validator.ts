@@ -1,25 +1,32 @@
-import { MiddlewareObj, Request } from '@middy/core';
+import { Request } from '@middy/core';
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import { ZodSchema } from 'zod';
-import { handleZodError } from './zod-error-handler';
+import { ValidationError } from '../utils/errors/app-error';
 
 /**
- * Middleware to validate query parameters
- * @param schema Zod schema to validate against
+ * Middleware to validate path or query parameters using a Zod schema
  */
-export const queryParamsValidator = (schema: ZodSchema): MiddlewareObj => {
+export const queryParamsValidator = (schema: ZodSchema) => {
   return {
-    before: (async (request: Request) => {
-      const event = request.event as APIGatewayProxyEvent;
-      const queryParams = event.queryStringParameters || {};
-      const result = schema.safeParse(queryParams);
-      
-      if (!result.success) {
-        throw handleZodError(result.error);
+    before: async (request: Request<APIGatewayProxyEvent>) => {
+      try {
+        // If path parameters exist, validate them
+        if (request.event.pathParameters) {
+          const validatedParams = schema.parse(request.event.pathParameters);
+          request.event.pathParameters = validatedParams;
+        } 
+        // If query parameters exist, validate them
+        else if (request.event.queryStringParameters) {
+          const validatedParams = schema.parse(request.event.queryStringParameters);
+          request.event.queryStringParameters = validatedParams;
+        }
+        // If neither exists, validate an empty object
+        else {
+          schema.parse({});
+        }
+      } catch (error) {
+        throw new ValidationError('Invalid parameters', { error });
       }
-
-      // Attach validated params to the request for use in the handler
-      request.event.queryStringParameters = result.data;
-    })
+    }
   };
 }; 
