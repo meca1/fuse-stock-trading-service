@@ -9,6 +9,7 @@ import {
   ListStocksResult,
   StockCache,
   STOCK_CONFIG,
+  isStockCacheExpired,
 } from '../types/models/stock';
 import { StockNotFoundError, InvalidPriceError } from '../utils/errors/stock-errors';
 import { CacheService } from './cache-service';
@@ -287,9 +288,8 @@ export class StockService {
   private async fetchStockBySymbol(symbol: string): Promise<VendorStock | null> {
     try {
       // 1. Check in-memory cache first (fastest)
-      const now = Date.now();
       const cachedStock = this.stockCache[symbol];
-      if (cachedStock && now - cachedStock.timestamp < STOCK_CONFIG.CACHE_TTL) {
+      if (cachedStock && !isStockCacheExpired(cachedStock.timestamp)) {
         console.log(`[IN-MEMORY CACHE HIT] Found ${symbol} in memory cache`);
         return cachedStock.data;
       }
@@ -310,7 +310,7 @@ export class StockService {
           // Update in-memory cache
           this.stockCache[symbol] = {
             data: vendorStock,
-            timestamp: now,
+            timestamp: Date.now(),
           };
           return vendorStock;
         }
@@ -336,7 +336,7 @@ export class StockService {
             // Update both caches
             this.stockCache[symbol] = {
               data: vendorStock,
-              timestamp: now,
+              timestamp: Date.now(),
             };
 
             // Update stock cache with the new data
@@ -379,7 +379,7 @@ export class StockService {
           // Update all caches
           this.stockCache[symbol] = {
             data: vendorStock,
-            timestamp: now,
+            timestamp: Date.now(),
           };
 
           // Update stock cache
@@ -476,11 +476,16 @@ export class StockService {
       const cachedData = await this.stockCacheRepo.getCachedStocks(baseKey, nextToken);
 
       if (cachedData && Array.isArray(cachedData.stocks) && cachedData.stocks.length > 0) {
-        console.log(`[CACHE HIT] Found data for key: ${cacheKey}`);
-        return {
-          data: cachedData,
-          cached: true,
-        };
+        // Verificar si el cache ha expirado
+        const cacheTimestamp = new Date(cachedData.lastUpdated || '').getTime();
+        if (!isStockCacheExpired(cacheTimestamp)) {
+          console.log(`[CACHE HIT] Found data for key: ${cacheKey}`);
+          return {
+            data: cachedData,
+            cached: true,
+          };
+        }
+        console.log(`[CACHE EXPIRED] Data for key: ${cacheKey} has expired`);
       }
 
       console.log(`[CACHE MISS] No data found for key: ${cacheKey}`);

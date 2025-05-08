@@ -58,10 +58,20 @@ export interface StockCache {
  * Configuration for stock service
  */
 export const STOCK_CONFIG = {
-  CACHE_TTL: 300 * 1000, // 5 minutes in milliseconds
+  CACHE_TTL: 120 * 1000, // 2 minutes
   MAX_PAGES: 10,
   PRICE_VARIATION_THRESHOLD: 0.02, // 2%
 } as const;
+
+/**
+ * Validates if a stock cache entry has expired based on its timestamp
+ * @param timestamp The timestamp when the cache entry was created
+ * @returns boolean indicating if the cache entry has expired
+ */
+export function isStockCacheExpired(timestamp: number): boolean {
+  const now = Date.now();
+  return now - timestamp >= STOCK_CONFIG.CACHE_TTL;
+}
 
 /**
  * Interface for parameters used in getStocksWithCache method

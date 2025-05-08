@@ -119,7 +119,7 @@ export class CacheService {
    * Save an item to the cache
    * @param key The key to save
    * @param data The data to cache
-   * @param ttl Optional TTL in seconds
+   * @param ttl Optional TTL in milliseconds
    */
   async set<T>(key: string, data: T, ttl?: number): Promise<void> {
     try {
@@ -144,12 +144,24 @@ export class CacheService {
         dataValues: data && typeof data === 'object' ? Object.values(data) : [],
       });
 
+      // Convert TTL from milliseconds to seconds for DynamoDB
+      const ttlInSeconds = ttl ? Math.floor(ttl / 1000) : 300; // Default 5 minutes if not specified
+      const currentTimeInSeconds = Math.floor(Date.now() / 1000);
+      const expirationTime = currentTimeInSeconds + ttlInSeconds;
+
       const item = {
         [this.primaryKeyName]: key,
-            data,
-            lastUpdated: new Date().toISOString(),
-            ...(ttl && { ttl: Math.floor(Date.now() / 1000) + ttl }),
-          };
+        data,
+        lastUpdated: new Date().toISOString(),
+        ttl: expirationTime,
+      };
+
+      console.log('[CACHE] Saving item with TTL:', {
+        ttlInMilliseconds: ttl,
+        ttlInSeconds,
+        currentTimeInSeconds,
+        expirationTime,
+      });
 
       const command = new PutCommand({
         TableName: this.tableName,
@@ -164,21 +176,9 @@ export class CacheService {
       });
 
       await this.docClient.send(command);
-    } catch (error: any) {
-      console.error('[CACHE ERROR] Error saving item for key', key + ':', {
-        error,
-        errorName: error.name,
-        errorMessage: error.message,
-        errorCode: error.code,
-        errorType: error.__type,
-        errorMetadata: error.$metadata,
-        stack: error.stack,
-        item: {
-          [this.primaryKeyName]: key,
-          data,
-          timestamp: new Date().toISOString(),
-        },
-      });
+      console.log('[CACHE] Successfully saved item with TTL:', expirationTime);
+    } catch (error) {
+      console.error('[CACHE ERROR] Error saving item:', error);
       throw error;
     }
   }
