@@ -1,4 +1,4 @@
-import { EmailParams, EmailParamsChangeStockPrice } from '../models/shared';
+import { EmailParams, EmailParamsChangeStockPrice } from '../../types/models/shared';
 
 /**
  * Interface for email service
