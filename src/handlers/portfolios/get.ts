@@ -9,6 +9,7 @@ import { PortfolioService } from '../../services/portfolio-service';
 import { apiKeyValidator } from '../../middleware/api-key-validator';
 import { queryParamsValidator } from '../../middleware/query-params-validator';
 import { createResponseValidator } from '../../middleware/response-validator';
+import { securityHeaders } from '../../middleware/security-headers';
 
 // Schemas
 import { listPortfoliosParamsSchema } from '../../types/schemas/handlers';
@@ -47,4 +48,5 @@ export const handler = middy(getPortfoliosHandler)
   .use(apiKeyValidator())
   .use(queryParamsValidator(listPortfoliosParamsSchema))
   .use(httpErrorHandler())
-  .use(createResponseValidator(portfolioResponseSchema));
+  .use(createResponseValidator(portfolioResponseSchema))
+  .use(securityHeaders());

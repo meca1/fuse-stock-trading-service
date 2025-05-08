@@ -9,6 +9,7 @@ import { StockService } from '../../services/stock-service';
 import { apiKeyValidator } from '../../middleware/api-key-validator';
 import { queryParamsValidator } from '../../middleware/query-params-validator';
 import { createResponseValidator } from '../../middleware/response-validator';
+import { securityHeaders } from '../../middleware/security-headers';
 
 // Schemas
 import { listStocksQuerySchema } from '../../types/schemas/handlers';
@@ -44,4 +45,5 @@ export const handler = middy(listStocksHandler)
   .use(apiKeyValidator())
   .use(queryParamsValidator(listStocksQuerySchema))
   .use(httpErrorHandler())
-  .use(createResponseValidator(stocksResponseSchema));
+  .use(createResponseValidator(stocksResponseSchema))
+  .use(securityHeaders());

@@ -9,6 +9,7 @@ import { PortfolioService } from '../../services/portfolio-service';
 import { apiKeyValidator } from '../../middleware/api-key-validator';
 import { queryParamsValidator } from '../../middleware/query-params-validator';
 import { createResponseValidator } from '../../middleware/response-validator';
+import { securityHeaders } from '../../middleware/security-headers';
 
 // Schemas
 import { buyStockParamsSchema } from '../../types/schemas/handlers';
@@ -16,6 +17,12 @@ import { buyStockResponseSchema } from '../../types/schemas/responses';
 
 // Constants
 import { HTTP_HEADERS, HTTP_STATUS } from '../../constants/http';
+
+interface VendorApiError extends Error {
+  status?: number;
+  code?: string;
+  retryable?: boolean;
+}
 
 /**
  * Handler to execute a stock purchase
@@ -35,6 +42,30 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
       userId: string;
     };
 
+    // Validate input parameters
+    if (!symbol || !price || !quantity || !userId) {
+      return {
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+        headers: HTTP_HEADERS,
+        body: JSON.stringify({
+          status: 'error',
+          message: 'Missing required parameters: symbol, price, quantity, or userId',
+        }),
+      };
+    }
+
+    // Validate numeric values
+    if (price <= 0 || quantity <= 0) {
+      return {
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+        headers: HTTP_HEADERS,
+        body: JSON.stringify({
+          status: 'error',
+          message: 'Price and quantity must be greater than 0',
+        }),
+      };
+    }
+
     // Execute purchase
     const transaction = await portfolioService.buyStock(userId, symbol, quantity, price);
 
@@ -52,14 +83,55 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
       }),
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+    console.error('Error buying stock:', error);
 
+    const vendorError = error as VendorApiError;
+
+    // Handle specific error types
+    if (vendorError.status === 500) {
+      return {
+        statusCode: HTTP_STATUS.INTERNAL_SERVER_ERROR,
+        headers: HTTP_HEADERS,
+        body: JSON.stringify({
+          status: 'error',
+          message: 'The stock trading service is currently unavailable. Please try again later.',
+          error: vendorError.message,
+        }),
+      };
+    }
+
+    if (vendorError.status === 404) {
+      return {
+        statusCode: HTTP_STATUS.NOT_FOUND,
+        headers: HTTP_HEADERS,
+        body: JSON.stringify({
+          status: 'error',
+          message: 'Stock not found or not available for trading',
+          error: vendorError.message,
+        }),
+      };
+    }
+
+    if (vendorError.status === 400) {
+      return {
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+        headers: HTTP_HEADERS,
+        body: JSON.stringify({
+          status: 'error',
+          message: 'Invalid request parameters',
+          error: vendorError.message,
+        }),
+      };
+    }
+
+    // Default error response
     return {
-      statusCode: HTTP_STATUS.BAD_REQUEST,
+      statusCode: HTTP_STATUS.INTERNAL_SERVER_ERROR,
       headers: HTTP_HEADERS,
       body: JSON.stringify({
         status: 'error',
-        message: errorMessage,
+        message: 'An unexpected error occurred while processing your request',
+        error: vendorError.message || 'Unknown error',
       }),
     };
   }
@@ -70,4 +142,5 @@ export const handler = middy(buyStockHandler)
   .use(apiKeyValidator())
   .use(queryParamsValidator(buyStockParamsSchema))
   .use(httpErrorHandler())
-  .use(createResponseValidator(buyStockResponseSchema));
+  .use(createResponseValidator(buyStockResponseSchema))
+  .use(securityHeaders());
