@@ -6,6 +6,8 @@ The system restricts API traffic to 10 requests per second and a maximum of 5 co
 
 ## Architecture Overview
 
+![Architecture Diagram](docs/architecture-diagram.png)
+
 The service is implemented as a serverless microservice using AWS Lambda functions with a focus on scalability and reliability when interacting with an unreliable vendor API.
 
 ```mermaid
