@@ -10,6 +10,7 @@ import { apiKeyValidator } from '../../middleware/api-key-validator';
 import { queryParamsValidator } from '../../middleware/query-params-validator';
 import { createResponseValidator } from '../../middleware/response-validator';
 import { securityHeaders } from '../../middleware/security-headers';
+import { errorHandler } from '../../middleware/error-handler';
 
 // Schemas
 import { buyStockParamsSchema } from '../../types/schemas/handlers';
@@ -18,10 +19,12 @@ import { buyStockResponseSchema } from '../../types/schemas/responses';
 // Constants
 import { HTTP_HEADERS, HTTP_STATUS } from '../../constants/http';
 
-interface VendorApiError extends Error {
-  status?: number;
-  code?: string;
-  retryable?: boolean;
+// Errors
+import { ValidationError, VendorApiError } from '../../utils/errors/app-error';
+
+interface VendorApiErrorResponse {
+  status: number;
+  message?: string;
 }
 
 /**
@@ -30,42 +33,28 @@ interface VendorApiError extends Error {
 const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const startTime = Date.now();
 
+  // Initialize service
+  const portfolioService = await PortfolioService.initialize();
+
+  // Get parameters from validated event
+  const { symbol } = event.pathParameters as { symbol: string };
+  const { price, quantity, userId } = JSON.parse(event.body!) as {
+    price: number;
+    quantity: number;
+    userId: string;
+  };
+
+  // Validate input parameters
+  if (!symbol || !price || !quantity || !userId) {
+    throw new ValidationError('Missing required parameters: symbol, price, quantity, or userId');
+  }
+
+  // Validate numeric values
+  if (price <= 0 || quantity <= 0) {
+    throw new ValidationError('Price and quantity must be greater than 0');
+  }
+
   try {
-    // Initialize service
-    const portfolioService = await PortfolioService.initialize();
-
-    // Get parameters from validated event
-    const { symbol } = event.pathParameters as { symbol: string };
-    const { price, quantity, userId } = JSON.parse(event.body!) as {
-      price: number;
-      quantity: number;
-      userId: string;
-    };
-
-    // Validate input parameters
-    if (!symbol || !price || !quantity || !userId) {
-      return {
-        statusCode: HTTP_STATUS.BAD_REQUEST,
-        headers: HTTP_HEADERS,
-        body: JSON.stringify({
-          status: 'error',
-          message: 'Missing required parameters: symbol, price, quantity, or userId',
-        }),
-      };
-    }
-
-    // Validate numeric values
-    if (price <= 0 || quantity <= 0) {
-      return {
-        statusCode: HTTP_STATUS.BAD_REQUEST,
-        headers: HTTP_HEADERS,
-        body: JSON.stringify({
-          status: 'error',
-          message: 'Price and quantity must be greater than 0',
-        }),
-      };
-    }
-
     // Execute purchase
     const transaction = await portfolioService.buyStock(userId, symbol, quantity, price);
 
@@ -83,57 +72,16 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
       }),
     };
   } catch (error) {
-    console.error('Error buying stock:', error);
-
-    const vendorError = error as VendorApiError;
-
-    // Handle specific error types
-    if (vendorError.status === 500) {
-      return {
-        statusCode: HTTP_STATUS.INTERNAL_SERVER_ERROR,
-        headers: HTTP_HEADERS,
-        body: JSON.stringify({
-          status: 'error',
-          message: 'The stock trading service is currently unavailable. Please try again later.',
-          error: vendorError.message,
-        }),
-      };
+    // Si es un error del API del vendedor, lo convertimos a VendorApiError
+    const vendorError = error as VendorApiErrorResponse;
+    if (vendorError.status) {
+      throw new VendorApiError(
+        vendorError.message || 'Error from vendor API',
+        vendorError.status,
+        { symbol, price, quantity, userId }
+      );
     }
-
-    if (vendorError.status === 404) {
-      return {
-        statusCode: HTTP_STATUS.NOT_FOUND,
-        headers: HTTP_HEADERS,
-        body: JSON.stringify({
-          status: 'error',
-          message: 'Stock not found or not available for trading',
-          error: vendorError.message,
-        }),
-      };
-    }
-
-    if (vendorError.status === 400) {
-      return {
-        statusCode: HTTP_STATUS.BAD_REQUEST,
-        headers: HTTP_HEADERS,
-        body: JSON.stringify({
-          status: 'error',
-          message: 'Invalid request parameters',
-          error: vendorError.message,
-        }),
-      };
-    }
-
-    // Default error response
-    return {
-      statusCode: HTTP_STATUS.INTERNAL_SERVER_ERROR,
-      headers: HTTP_HEADERS,
-      body: JSON.stringify({
-        status: 'error',
-        message: 'An unexpected error occurred while processing your request',
-        error: vendorError.message || 'Unknown error',
-      }),
-    };
+    throw error;
   }
 };
 
@@ -141,6 +89,7 @@ const buyStockHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayP
 export const handler = middy(buyStockHandler)
   .use(apiKeyValidator())
   .use(queryParamsValidator(buyStockParamsSchema))
+  .use(errorHandler())
   .use(httpErrorHandler())
   .use(createResponseValidator(buyStockResponseSchema))
   .use(securityHeaders());
