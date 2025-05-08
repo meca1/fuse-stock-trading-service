@@ -12,6 +12,7 @@ import {
 } from '../types/models/portfolio';
 import { ITransaction } from '../types/models/transaction';
 import { TransactionType, TransactionStatus } from '../types/common/enums';
+import { ValidationError } from '../utils/errors/app-error';
 
 /**
  * Service to handle portfolio-related operations and caching
@@ -304,8 +305,8 @@ export class PortfolioService {
       if (priceDiff > maxDiff) {
         const minPrice = Number((numericCurrentPrice * 0.98).toFixed(4));
         const maxPrice = Number((numericCurrentPrice * 1.02).toFixed(4));
-        throw new Error(
-          `Invalid price. Current price is $${numericCurrentPrice.toFixed(4)}. Your price must be within 2% ($${maxDiff.toFixed(4)}) of the current price. Valid range: $${minPrice} - $${maxPrice}`,
+        throw new ValidationError(
+          `Invalid price. Current price is $${numericCurrentPrice.toFixed(4)}. Your price must be within 2% ($${maxDiff.toFixed(4)}) of the current price. Valid range: $${minPrice} - $${maxPrice}`
         );
       }
 
