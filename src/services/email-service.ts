@@ -1,6 +1,6 @@
 import { SendEmailCommandInput, SES } from '@aws-sdk/client-ses';
 import * as nodemailer from 'nodemailer';
-import { EmailParams } from '../types/models/shared';
+import { EmailParams, EmailParamsChangeStockPrice } from '../types/models/shared';
 import { IEmailService } from './types/email-service';
 import { EmailRepository } from '../repositories/email-repository';
 
@@ -94,6 +94,11 @@ export class EmailService implements IEmailService {
    */
   async sendReportEmail(params: EmailParams): Promise<void> {
     await this.emailRepository.sendReportEmail(params);
+  }
+
+
+  async notifyChangeStockPrice(params: EmailParamsChangeStockPrice): Promise<void> {
+    await this.emailRepository.notifyChangeStockPrice(params);
   }
 
   /**

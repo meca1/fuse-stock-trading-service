@@ -13,7 +13,7 @@ import {
 import { ITransaction } from '../types/models/transaction';
 import { TransactionType, TransactionStatus } from '../types/common/enums';
 import { ValidationError } from '../utils/errors/app-error';
-
+import { EmailService } from './email-service';
 /**
  * Service to handle portfolio-related operations and caching
  */
@@ -27,6 +27,7 @@ export class PortfolioService {
     private userRepository: UserRepository,
     private vendorApiRepository: VendorApiRepository,
     private portfolioCacheRepo: PortfolioCacheRepository,
+    private emailService: EmailService,
   ) {}
 
   /**
@@ -39,6 +40,7 @@ export class PortfolioService {
     const userRepository = await UserRepository.initialize();
     const vendorApiRepository = new VendorApiRepository({});
     const portfolioCacheRepo = new PortfolioCacheRepository();
+    const emailService = await EmailService.initialize();
 
     return new PortfolioService(
       portfolioRepository,
@@ -46,6 +48,7 @@ export class PortfolioService {
       userRepository,
       vendorApiRepository,
       portfolioCacheRepo,
+      emailService,
     );
   }
 
@@ -305,6 +308,21 @@ export class PortfolioService {
       if (priceDiff > maxDiff) {
         const minPrice = Number((numericCurrentPrice * 0.98).toFixed(4));
         const maxPrice = Number((numericCurrentPrice * 1.02).toFixed(4));
+
+        console.log('Sending email notification');
+        await this.emailService.notifyChangeStockPrice({
+          recipients: ['admin@example.com'],
+          subject: 'Stock price change notification',
+          reportData: {
+            symbol,
+            currentPrice: numericCurrentPrice,
+            minPrice,
+            maxPrice,
+            priceDiff,
+            maxDiff,
+          },
+        });
+
         throw new ValidationError(
           `Invalid price. Current price is $${numericCurrentPrice.toFixed(4)}. Your price must be within 2% ($${maxDiff.toFixed(4)}) of the current price. Valid range: $${minPrice} - $${maxPrice}`
         );

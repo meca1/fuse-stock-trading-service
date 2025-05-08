@@ -23,6 +23,16 @@ export interface ReportData {
   };
 }
 
+
+export interface ReportDataNotifyChangeStockPrice {
+  symbol: string;
+  currentPrice: number;
+  minPrice: number;
+  maxPrice: number;
+  priceDiff: number;
+  maxDiff: number;
+}
+
 /**
  * Interface for email parameters
  */
@@ -30,4 +40,11 @@ export interface EmailParams {
   recipients: string[];
   subject: string;
   reportData: ReportData;
+}
+
+
+export interface EmailParamsChangeStockPrice {
+  recipients: string[];
+  subject: string;
+  reportData: ReportDataNotifyChangeStockPrice; 
 }

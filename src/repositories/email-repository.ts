@@ -1,6 +1,6 @@
 import { SES } from '@aws-sdk/client-ses';
 import nodemailer from 'nodemailer';
-import { EmailParams } from '../types/models/shared';
+import { EmailParams, EmailParamsChangeStockPrice, ReportDataNotifyChangeStockPrice } from '../types/models/shared';
 import { CacheService } from '../services/cache-service';
 import { ITransaction } from '../types/models/transaction';
 
@@ -60,6 +60,31 @@ export class EmailRepository {
       console.log('AWS SES client initialized successfully');
     } catch (error) {
       console.error('Error initializing AWS SES client:', error);
+    }
+  }
+
+  public async notifyChangeStockPrice(params: EmailParamsChangeStockPrice): Promise<void> {
+    const { recipients, subject, reportData } = params;
+
+    // Generar HTML del reporte
+    const htmlContent = this.notifyChangeStockPriceAsHtml(reportData);
+
+    console.log('htmlContent', htmlContent);
+    try {
+      if (this.ses) {
+        // Enviar con AWS SES
+        await this.sendWithSES(recipients, subject, htmlContent);
+      } else if (this.transporter) {
+        // Enviar con SMTP
+        await this.sendWithSMTP(recipients, subject, htmlContent);
+      } else {
+        throw new Error('No email provider has been initialized');
+      }
+
+      console.log(`Report successfully sent to ${recipients.join(', ')}`);
+    } catch (error) {
+      console.error('Error sending email:', error);
+      throw error;
     }
   }
 
@@ -170,6 +195,13 @@ export class EmailRepository {
     };
 
     await this.transporter.sendMail(mailOptions);
+  }
+
+  private notifyChangeStockPriceAsHtml(reportData: ReportDataNotifyChangeStockPrice): string {
+    return `
+      <h1>Stock price change notification</h1>
+      <p>The stock ${reportData.symbol} has a price change of ${reportData.priceDiff} from ${reportData.currentPrice} to ${reportData.minPrice} and ${reportData.maxPrice}</p>
+    `;
   }
 
   /**
@@ -327,3 +359,5 @@ export class EmailRepository {
     `;
   }
 } 
+
+

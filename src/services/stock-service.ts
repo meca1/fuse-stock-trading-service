@@ -12,7 +12,6 @@ import {
   isStockCacheExpired,
 } from '../types/models/stock';
 import { StockNotFoundError, InvalidPriceError } from '../utils/errors/stock-errors';
-import { CacheService } from './cache-service';
 
 /**
  * Service to handle stock-related operations, token management and daily updates
@@ -21,21 +20,12 @@ export class StockService {
   private stockCache: StockCache = {};
   private requestsInProgress: Record<string, Promise<VendorStock | null>> = {};
   private isTokenUpdateRunning = false;
-  private cacheService: CacheService;
 
   constructor(
     private stockTokenRepo: StockTokenRepository,
     private stockCacheRepo: StockCacheRepository,
     private vendorApi: VendorApiClient,
-  ) {
-    this.cacheService = new CacheService({
-      tableName: process.env.DYNAMODB_TABLE || 'fuse-stock-cache-local',
-      region: process.env.DYNAMODB_REGION || 'local',
-      accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID || 'local',
-      secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY || 'local',
-      endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
-    });
-  }
+  ) { }
 
   /**
    * Creates and initializes a new instance of StockService with all required dependencies
