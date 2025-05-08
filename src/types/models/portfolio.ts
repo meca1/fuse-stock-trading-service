@@ -92,3 +92,12 @@ export interface CachedUserPortfolioSummary {
   };
   timestamp: string;
 }
+
+/**
+ * Interface for standardized response with cache metadata
+ */
+export interface PortfolioResponseWithCache {
+  data: PortfolioSummaryResponse;
+  fromCache: boolean;
+  timestamp: string;
+}
