@@ -8,7 +8,14 @@ plugins:
   - serverless-offline
 
 custom:
-  esbuild: ${file(./esbuild.config.js)}
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: false
+    external: ['aws-sdk']
+    target: 'node18'
+    platform: 'node'
+    format: 'cjs'
   # Dotenv plugin configuration
   dotenv:
     path: ./.env
