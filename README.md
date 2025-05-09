@@ -2,6 +2,16 @@
 
 A serverless application for stock trading built with AWS Lambda, PostgreSQL, and DynamoDB.
 
+## Documentation
+
+For detailed technical documentation, architecture decisions, and implementation details, please refer to the [Technical Report](REPORT.md). The report includes:
+- Architecture overview and diagrams
+- Key technical decisions and their rationale
+- Implementation challenges and solutions
+- Security implementation details
+- Deployment approach
+- Detailed endpoint sequence diagrams
+
 ## Prerequisites
 
 - Node.js 18 or higher
